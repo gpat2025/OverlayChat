@@ -14,7 +14,8 @@ import {
   getRoomId,
   setHidden,
   sortByTimestampDescending,
-  applyTeamTheme
+  applyTeamTheme,
+  getTeamLogoPath
 } from "./shared.js";
 
 const params = new URLSearchParams(window.location.search);
@@ -263,6 +264,9 @@ const renderPredictions = (predictions) => {
         displayScore = escapeHtml(prediction.predictedScore || "");
       }
 
+      const winnerLogo = getTeamLogoPath(prediction.predictedWinner);
+      const winnerLogoHtml = winnerLogo ? `<img src="${winnerLogo}" class="team-logo-inline" alt="" />` : "";
+
       return `
         <article class="prediction-card compact multi-line">
           ${adminActionMarkup("prediction", prediction.clientId)}
@@ -272,7 +276,9 @@ const renderPredictions = (predictions) => {
           </div>
           <div class="prediction-card-main">
             <div class="prediction-val">${displayScore}</div>
-            <span class="prediction-side ${sideClass}">${escapeHtml(prediction.predictedWinner)}</span>
+            <span class="prediction-side ${sideClass}">
+              ${winnerLogoHtml}
+            </span>
           </div>
         </article>
       `;
@@ -284,8 +290,11 @@ const updateGraph = () => {
   const teamA = (currentMeta.teamA || "Team A").trim();
   const teamB = (currentMeta.teamB || "Team B").trim();
   
-  teamALabel.textContent = teamA;
-  teamBLabel.textContent = teamB;
+  const logoA = getTeamLogoPath(teamA);
+  const logoB = getTeamLogoPath(teamB);
+  
+  teamALabel.innerHTML = logoA ? `<img src="${logoA}" class="team-logo-inline" alt="" /> ${escapeHtml(teamA)}` : escapeHtml(teamA);
+  teamBLabel.innerHTML = logoB ? `${escapeHtml(teamB)} <img src="${logoB}" class="team-logo-inline" alt="" />` : escapeHtml(teamB);
 
   if (!currentPredictions.length) {
     graphFill.style.width = "50%";

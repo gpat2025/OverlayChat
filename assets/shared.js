@@ -108,6 +108,30 @@ export const TEAM_COLORS = {
   LSG: "#961212"
 };
 
+export const TEAM_LOGOS = {
+  MI: "Mumbai_Indians.svg",
+  CSK: "Chennai_Super_Kings.svg",
+  RCB: "Royal_Challengers_Bengaluru.svg",
+  KKR: "Kolkata_Knight_Riders.svg",
+  SRH: "Sunrisers_Hyderabad.svg",
+  PBKS: "Punjab_Kings.svg",
+  DC: "Delhi_Capitals.svg",
+  RR: "Rajasthan_Royals.svg",
+  GT: "Gujarat_Titans.svg",
+  LSG: "Lucknow_Super_Giants.svg"
+};
+
+export const getTeamLogoPath = (name) => {
+  if (!name) return null;
+  const clean = String(name).toUpperCase().trim();
+  for (const code in TEAM_LOGOS) {
+    if (clean === code || clean.startsWith(code + " ") || clean.includes(" " + code)) {
+      return `./assets/IPL_Logos_SVGs/${TEAM_LOGOS[code]}`;
+    }
+  }
+  return null;
+};
+
 const getContrastColor = (hex) => {
   if (!hex || hex.length < 6) return "#ffffff";
   const r = parseInt(hex.slice(1, 3), 16);

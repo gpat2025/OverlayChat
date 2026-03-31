@@ -85,3 +85,50 @@
 .stack-form .dual-row.single-col {
   grid-template-columns: 1fr !important;
 }
+
+/* Team Logo Styling - 1.5x larger, uniform, and centered */
+.team-logo-inline {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  vertical-align: middle;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+/* Remove backgrounds from team indicators in the overlay */
+.prediction-side {
+  background: transparent !important;
+  border: none !important;
+  color: var(--contrast, #ffffff) !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  text-transform: uppercase;
+  font-weight: 800;
+}
+
+/* High Contrast Visibility for all Overlay Text */
+.prediction-card.compact .prediction-name,
+.prediction-card.compact .card-time,
+.prediction-card.compact .prediction-val,
+.prediction-card.compact .prediction-val span {
+  color: var(--contrast, #ffffff) !important;
+  opacity: 1 !important;
+}
+
+.prediction-card.compact .prediction-name {
+  font-size: 0.95rem;
+}
+
+.prediction-card.compact .card-time {
+  font-size: 0.8rem;
+}
+
+/* Ensure Logo alignment in graph labels */
+.graph-labels .team-logo-inline {
+  width: 20px;
+  height: 20px;
+  margin: 0 6px;
+}
