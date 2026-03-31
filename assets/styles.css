@@ -431,7 +431,7 @@ button:hover {
 
 .overlay-topbar {
   width: 100%;
-  height: 44px; /* Standard Apple Titlebar height ish */
+  height: 24px; /* Reduced from 44px for a tighter fit */
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -563,6 +563,7 @@ button:hover {
   align-items: center;
   gap: 10px;
   font-size: 0.98rem;
+  color: var(--text); /* Default to high-contrast text color */
 }
 
 .section-title svg {
@@ -571,7 +572,7 @@ button:hover {
 }
 
 .predictions-title {
-  color: var(--accent);
+  color: #ffffff; /* Changed to white as requested */
 }
 
 .chat-title {

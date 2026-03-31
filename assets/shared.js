@@ -141,10 +141,23 @@ export const applyTeamTheme = (teamA, teamB) => {
   const root = document.documentElement;
   root.style.setProperty("--team-a", colorA);
   root.style.setProperty("--team-b", colorB);
-  root.style.setProperty("--team-a-text", textA);
-  root.style.setProperty("--team-b-text", textB);
+  root.style.setProperty("--text-a", textA);
+  root.style.setProperty("--text-b", textB);
 
-  // Gradient helper (darkened for better text overlay if needed)
+  // Set a global contrast color based on the "leading" team (usually Home)
+  root.style.setProperty("--contrast", textA);
+
   const grad = `linear-gradient(135deg, ${colorA}ee, ${colorB}ee)`;
   root.style.setProperty("--team-gradient", grad);
+};
+
+/**
+ * Converts "18.2" overs notation into total balls (110).
+ * Used for precise scoring logic.
+ */
+export const oversToBalls = (val) => {
+  const num = Number(val || 0);
+  const overs = Math.floor(num);
+  const balls = Math.round((num - overs) * 10);
+  return overs * 6 + balls;
 };
