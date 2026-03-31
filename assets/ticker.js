@@ -50,8 +50,49 @@ const updateTickerDOM = () => {
       else if (currentMeta.disableScoreB && !currentMeta.disableScoreA) chasingTeam = teamA;
     }
     const lowChaser = (chasingTeam || "").toLowerCase();
+    
+    // Sort predictions if requested
+    const sortedPredictions = [...currentPredictions].sort((a, b) => {
+      if (currentMeta.predictionSort !== "score") return 0;
+      
+      const getValue = (p) => {
+        const is2ndInnings = Boolean(currentMeta.secondInnings);
+        const teamA = (currentMeta.teamA || "Home Team").toString().trim();
+        const teamB = (currentMeta.teamB || "Away Team").toString().trim();
+        
+        let chasingTeam = null;
+        if (is2ndInnings) {
+          if (currentMeta.disableScoreA && !currentMeta.disableScoreB) chasingTeam = teamB;
+          else if (currentMeta.disableScoreB && !currentMeta.disableScoreA) chasingTeam = teamA;
+        }
 
-    const fanParts = currentPredictions
+        let val = 0;
+        if (is2ndInnings && chasingTeam) {
+          // In 2nd innings, use the chasing team's field
+          const lowChaser = chasingTeam.toLowerCase();
+          const lowA = teamA.toLowerCase();
+          if (lowChaser === lowA) val = Number(p.scoreA) || 0;
+          else val = Number(p.scoreB) || 0;
+        } else {
+          // In 1st innings, use predicted winner's score
+          const winner = (p.winner || "").toString().trim().toLowerCase();
+          const lowA = teamA.toLowerCase();
+          const lowB = teamB.toLowerCase();
+          
+          if (winner === lowA) val = Number(p.scoreA) || 0;
+          else if (winner === lowB) val = Number(p.scoreB) || 0;
+          else val = Math.max(Number(p.scoreA) || 0, Number(p.scoreB) || 0);
+        }
+
+        return val === 0 ? Infinity : val;
+      };
+      
+      const valA = getValue(a);
+      const valB = getValue(b);
+      return valA - valB;
+    });
+
+    const fanParts = sortedPredictions
       .map((p) => {
         const predictedWinnerOrig = (p.winner || "Undecided").toString().trim();
         const predictedWinnerLow = predictedWinnerOrig.toLowerCase();

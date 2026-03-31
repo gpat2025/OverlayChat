@@ -39,6 +39,9 @@ const showTickerButton = document.querySelector("#showTicker");
 const hideTickerButton = document.querySelector("#hideTicker");
 const reloadTickerButton = document.querySelector("#reloadTicker");
 const resetTickerBoundsButton = document.querySelector("#resetTickerBounds");
+const sortStatus = document.querySelector("#sortStatus");
+const toggleSortModeButton = document.querySelector("#toggleSortMode");
+const dotSort = document.querySelector("#dotSort");
 
 // Status Dots
 const dotOverlay = document.querySelector("#dotOverlay");
@@ -100,6 +103,20 @@ const syncJoinUi = () => {
     : "Hide Join Section";
 };
 
+const syncSortUi = () => {
+  const sortMode = currentMeta.predictionSort || "newest";
+  const isScore = sortMode === "score";
+  
+  sortStatus.textContent = isScore ? "Score (Asc)" : "Newest First";
+  toggleSortModeButton.textContent = isScore
+    ? "Sort by Newest"
+    : "Sort by Score";
+  
+  if (dotSort) {
+    dotSort.className = `dot ${isScore ? 'warning' : 'active'}`;
+  }
+};
+
 const getFormMeta = () => {
   return {
     matchTitle: matchTitleInput.value.trim(),
@@ -109,6 +126,7 @@ const getFormMeta = () => {
     disableScoreA: disableScoreAInput.checked,
     disableScoreB: disableScoreBInput.checked,
     secondInnings: secondInningsInput.checked,
+    predictionSort: currentMeta.predictionSort || "newest",
     predictionsPaused: Boolean(currentMeta.predictionsPaused),
     hideChat: Boolean(currentMeta.hideChat),
     hideJoin: Boolean(currentMeta.hideJoin)
@@ -157,6 +175,7 @@ const subscribeToMeta = (roomId) => {
     syncPauseUi();
     syncChatUi();
     syncJoinUi();
+    syncSortUi();
   });
 };
 
@@ -295,6 +314,31 @@ toggleHideJoinButton.addEventListener("click", async () => {
       hideJoin: nextHideJoin
     };
     syncJoinUi();
+  } catch (error) {
+    console.error(error);
+  }
+});
+
+toggleSortModeButton.addEventListener("click", async () => {
+  if (!isFirebaseConfigured || !db || !currentSettings) {
+    return;
+  }
+
+  const roomId = normalizeRoomId(roomIdInput.value.trim() || currentSettings.roomId);
+  const currentSort = currentMeta.predictionSort || "newest";
+  const nextSort = currentSort === "newest" ? "score" : "newest";
+
+  try {
+    const meta = getFormMeta();
+    meta.predictionSort = nextSort;
+
+    await saveRoomMeta(roomId, meta);
+    currentMeta = {
+      ...currentMeta,
+      predictionSort: nextSort
+    };
+    syncSortUi();
+    await window.overlayDesktop.reloadOverlay();
   } catch (error) {
     console.error(error);
   }

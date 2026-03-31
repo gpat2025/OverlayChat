@@ -192,7 +192,65 @@ const adminActionMarkup = (type, id) =>
     : "";
 
 const renderPredictions = (predictions) => {
-  const recent = sortByTimestampDescending(predictions, "updatedAt").slice(0, 15);
+  const getSortedPredictions = (list, meta) => {
+    if (meta.predictionSort !== "score") {
+      return sortByTimestampDescending(list, "updatedAt");
+    }
+
+    const teamA = (meta.teamA || "Team A").toString().trim();
+    const teamB = (meta.teamB || "Team B").toString().trim();
+    const is2ndInnings = Boolean(meta.secondInnings);
+    
+    let chasingTeam = null;
+    if (is2ndInnings) {
+      if (meta.disableScoreA && !meta.disableScoreB) chasingTeam = teamB;
+      else if (meta.disableScoreB && !meta.disableScoreA) chasingTeam = teamA;
+    }
+
+    return [...list].sort((a, b) => {
+      const getValue = (p) => {
+        const is2ndInnings = Boolean(meta.secondInnings);
+        const teamA = (meta.teamA || "Team A").toString().trim();
+        const teamB = (meta.teamB || "Team B").toString().trim();
+        
+        let chasingTeam = null;
+        if (is2ndInnings) {
+          if (meta.disableScoreA && !meta.disableScoreB) chasingTeam = teamB;
+          else if (meta.disableScoreB && !meta.disableScoreA) chasingTeam = teamA;
+        }
+
+        let val = 0;
+        if (is2ndInnings && chasingTeam) {
+          // In 2nd innings, always use the chasing team's field
+          const lowChaser = chasingTeam.toLowerCase();
+          const lowA = teamA.toLowerCase();
+          if (lowChaser === lowA) val = Number(p.scoreA) || 0;
+          else val = Number(p.scoreB) || 0;
+        } else {
+          // In 1st innings, use predicted winner's score
+          const winner = (p.predictedWinner || "").toString().trim().toLowerCase();
+          const lowA = teamA.toLowerCase();
+          const lowB = teamB.toLowerCase();
+          
+          if (winner === lowA) val = Number(p.scoreA) || 0;
+          else if (winner === lowB) val = Number(p.scoreB) || 0;
+          else val = Math.max(Number(p.scoreA) || 0, Number(p.scoreB) || 0);
+        }
+
+        // Put zero/null scores at the end of the sort
+        return val === 0 ? Infinity : val;
+      };
+
+      const valA = getValue(a);
+      const valB = getValue(b);
+      
+      if (valA === valB) return (b.updatedAt || 0) - (a.updatedAt || 0);
+      return valA - valB; // Ascending: lowest first, fastest first
+    });
+  };
+
+  const sorted = getSortedPredictions(predictions, currentMeta);
+  const recent = sorted.slice(0, 15);
   predictionCount.textContent = `${predictions.length} live`;
 
   if (!recent.length) {
