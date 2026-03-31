@@ -35,50 +35,54 @@ const updateTickerDOM = () => {
     `);
   }
 
-  // 1b. Fan Predictions
-  currentPredictions.forEach(p => {
-    const teamA = (currentMeta.teamA || "Home Team").toString().trim();
-    const teamB = (currentMeta.teamB || "Away Team").toString().trim();
-    const is2ndInnings = Boolean(currentMeta.secondInnings);
-    
-    const lowA = teamA.toLowerCase();
-    const lowB = teamB.toLowerCase();
+  // 1b. Fan Predictions (Grouped)
+  if (currentPredictions.length > 0) {
+    const fanParts = currentPredictions.map(p => {
+      const teamA = (currentMeta.teamA || "Home Team").toString().trim();
+      const teamB = (currentMeta.teamB || "Away Team").toString().trim();
+      const is2ndInnings = Boolean(currentMeta.secondInnings);
+      
+      const lowA = teamA.toLowerCase();
+      const lowB = teamB.toLowerCase();
 
-    // Infer chasing team:
-    let chasingTeam = null;
-    if (is2ndInnings) {
-      if (currentMeta.disableScoreA && !currentMeta.disableScoreB) chasingTeam = teamB;
-      else if (currentMeta.disableScoreB && !currentMeta.disableScoreA) chasingTeam = teamA;
-    }
+      // Infer chasing team:
+      let chasingTeam = null;
+      if (is2ndInnings) {
+        if (currentMeta.disableScoreA && !currentMeta.disableScoreB) chasingTeam = teamB;
+        else if (currentMeta.disableScoreB && !currentMeta.disableScoreA) chasingTeam = teamA;
+      }
 
-    const lowChaser = (chasingTeam || "").toLowerCase();
-    const predictedWinner = (p.winner || "").toString().trim().toLowerCase();
-    const isChasingWinner = lowChaser && predictedWinner === lowChaser;
+      const lowChaser = (chasingTeam || "").toLowerCase();
+      const predictedWinnerOrig = (p.winner || "Undecided").toString().trim();
+      const predictedWinnerLow = predictedWinnerOrig.toLowerCase();
+      const isChasingWinner = lowChaser && predictedWinnerLow === lowChaser;
 
-    const detailParts = [];
-    if (!currentMeta.disableScoreA) {
-      const isAChaser = lowChaser === lowA;
-      const isOver = is2ndInnings && isAChaser && isChasingWinner;
-      const suffix = isOver ? " ov" : "";
-      const displayVal = isOver ? (Number(p.scoreA) || 0).toFixed(1) : p.scoreA;
-      detailParts.push(`${teamA} ${displayVal}${suffix}`);
-    }
-    if (!currentMeta.disableScoreB) {
-      const isBChaser = lowChaser === lowB;
-      const isOver = is2ndInnings && isBChaser && isChasingWinner;
-      const suffix = isOver ? " ov" : "";
-      const displayVal = isOver ? (Number(p.scoreB) || 0).toFixed(1) : p.scoreB;
-      detailParts.push(`${teamB} ${displayVal}${suffix}`);
-    }
-    const detail = `${p.name}: ${detailParts.join(' - ')}`;
-    
+      const detailParts = [];
+      if (!currentMeta.disableScoreA) {
+        const isAChaser = lowChaser === lowA;
+        const isOver = is2ndInnings && isAChaser && isChasingWinner;
+        const suffix = isOver ? " ov" : "";
+        const displayVal = isOver ? (Number(p.scoreA) || 0).toFixed(1) : p.scoreA;
+        detailParts.push(`${teamA} ${displayVal}${suffix}`);
+      }
+      if (!currentMeta.disableScoreB) {
+        const isBChaser = lowChaser === lowB;
+        const isOver = is2ndInnings && isBChaser && isChasingWinner;
+        const suffix = isOver ? " ov" : "";
+        const displayVal = isOver ? (Number(p.scoreB) || 0).toFixed(1) : p.scoreB;
+        detailParts.push(`${teamB} ${displayVal}${suffix}`);
+      }
+      
+      return `${p.name} (${predictedWinnerOrig}): ${detailParts.join(' - ')}`;
+    });
+
     items.push(`
       <span class="ticker-item fan-prediction">
-        <span class="ticker-badge">Fan Guess</span>
-        <span>${escapeHtml(detail)}</span>
+        <span class="ticker-badge">Fan Guesses</span>
+        <span>${escapeHtml(fanParts.join(' | '))}</span>
       </span>
     `);
-  });
+  }
 
   // 2. Recent Messages (Recent 1 min)
   validMessages.forEach(msg => {
@@ -110,8 +114,8 @@ const updateTickerDOM = () => {
 
   // Calculate dynamic duration: longer text = slower scroll to keep speed readable
   const textLength = tickerContent.innerText.length;
-  const speedFactor = 10; // chars per second roughly
-  const duration = Math.max(15, textLength / speedFactor);
+  const speedFactor = 7; // Lower is slower (chars per second)
+  const duration = Math.max(25, textLength / speedFactor);
   tickerContent.style.animationDuration = `${duration}s`;
 };
 

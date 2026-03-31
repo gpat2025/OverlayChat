@@ -1164,7 +1164,7 @@ body.desktop-embed .join-card {
   align-items: center;
   white-space: nowrap;
   padding-left: 100%; /* Start off-screen right */
-  animation: ticker-scroll 30s linear infinite;
+  animation: ticker-scroll 60s linear infinite;
   gap: 64px;
 }
 
