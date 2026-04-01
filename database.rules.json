@@ -19,6 +19,10 @@
           "$clientId": {
             ".validate": "newData.val() == null || (newData.hasChildren(['clientId', 'name', 'predictedWinner', 'updatedAt']))"
           }
+        },
+        "innings_history": {
+          ".read": true,
+          ".write": true
         }
       }
     },

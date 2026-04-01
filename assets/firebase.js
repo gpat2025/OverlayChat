@@ -65,6 +65,30 @@ export const clearRoomNode = async (roomId, child) => {
   await remove(roomRef(roomId, child));
 };
 
+export const saveInningsHistory = async (roomId, innings, results) => {
+  await set(roomRef(roomId, `innings_history/${innings}`), results);
+};
+
+export const getInningsHistory = async (roomId) => {
+  const snapshot = await get(roomRef(roomId, "innings_history"));
+  return snapshot.val() || {};
+};
+
+export const wipeMatchData = async (roomId) => {
+  await remove(roomRef(roomId, "predictions"));
+  await remove(roomRef(roomId, "innings_history"));
+  await update(roomRef(roomId, "meta"), {
+    matchTitle: "",
+    teamA: "",
+    teamB: "",
+    predictionsPaused: false,
+    secondInnings: false,
+    disableScoreA: false,
+    disableScoreB: false,
+    updatedAt: serverTimestamp()
+  });
+};
+
 export const removePrediction = async (roomId, clientId) => {
   await set(roomRef(roomId, `predictions/${clientId}`), null);
 };

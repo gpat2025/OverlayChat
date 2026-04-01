@@ -9,7 +9,10 @@ import {
   saveRoomMeta,
   clearRoomNode,
   getOnce,
-  updateActiveSession
+  updateActiveSession,
+  saveInningsHistory,
+  getInningsHistory,
+  wipeMatchData
 } from "../assets/firebase.js";
 import { getAudienceEntryUrl, escapeHtml } from "../assets/shared.js";
 
@@ -45,6 +48,9 @@ const resetTickerBoundsButton = document.querySelector("#resetTickerBounds");
 const sortStatus = document.querySelector("#sortStatus");
 const toggleSortModeButton = document.querySelector("#toggleSortMode");
 const dotSort = document.querySelector("#dotSort");
+
+let lastResults = [];
+let lastOverallResults = [];
 
 // Status Dots
 const dotOverlay = document.querySelector("#dotOverlay");
@@ -469,10 +475,17 @@ const resultsDashboard = document.getElementById("resultsDashboard");
 const resultsBody = document.getElementById("resultsBody");
 const closeResultsButton = document.getElementById("closeResults");
 const resActualScoreLabel = document.getElementById("resActualScore");
+const resSectionTitle = document.getElementById("resSectionTitle");
+const viewFinalStandingsButton = document.getElementById("viewFinalStandings");
+const overallDashboard = document.getElementById("overallDashboard");
+const overallBody = document.getElementById("overallBody");
+const overallMatchTitle = document.getElementById("overallMatchTitle");
+const closeOverallButton = document.getElementById("closeOverall");
+const exportOverallCsvButton = document.getElementById("exportOverallCsv");
+const endMatchButton = document.getElementById("endMatch");
 const exportCsvButton = document.getElementById("exportCsv");
 const clearPrep2ndButton = document.getElementById("clearAndPrep2nd");
 
-let lastResults = []; // Store for CSV export
 
 // Helper for Cricket Overs
 const oversToBalls = (val) => {
@@ -501,6 +514,14 @@ const updateResolutionVisibility = () => {
   const is2nd = Boolean(currentMeta.secondInnings);
   resolution1st.classList.toggle("hidden", is2nd);
   resolution2nd.classList.toggle("hidden", !is2nd);
+  
+  if (resSectionTitle) {
+    resSectionTitle.textContent = "Match Resolution";
+  }
+
+  if (calculatePointsButton) {
+    calculatePointsButton.textContent = is2nd ? "Resolve 2nd Innings" : "Resolve 1st Innings";
+  }
 
   // Strictly disable/enable inputs based on section
   actualScoreInput.disabled = is2nd;
@@ -675,7 +696,8 @@ const resolveMatch = async () => {
 
     // Fetch all predictions once
     const snapshot = await getOnce(roomRef(roomId, "predictions"));
-    const predictions = Object.values(snapshot.val() || {});
+    const predData = snapshot.val() || {};
+    const predictions = Object.values(predData);
 
     if (predictions.length === 0) {
       alert("No predictions found in this room.");
@@ -685,26 +707,32 @@ const resolveMatch = async () => {
     }
 
     // Process points
-    const results = predictions.map(p => {
+    const results = Object.entries(predData).map(([cid, p]) => {
       const pResult = is2nd
         ? calculateInnings2Points(p, actualWinner, actualVal)
         : calculateInnings1Points(p, actualVal);
 
       return {
+        clientId: cid,
         name: p.name || "Anonymous",
-        ...pResult
+        ...pResult,
+        originalPrediction: p
       };
     });
 
-    // Sort Descending
-    results.sort((a, b) => b.points - a.points);
-    lastResults = results;
+    // Sort Descending for the dashboard display
+    const sortedResults = [...results].sort((a, b) => b.points - a.points);
+    lastResults = sortedResults;
 
     // Render Dashboard
-    renderDashboard(results, actualVal, is2nd ? actualWinner : null);
+    renderDashboard(sortedResults, actualVal, is2nd ? actualWinner : null);
 
+    // Archive Results for Final Game Standings
+    // We only archive locally so it shows in the dashboard
+    // Permanent archival happens during "Prep 2nd Innings" or "End Match"
+    
     calculatePointsButton.disabled = false;
-    calculatePointsButton.textContent = "Resolve & View Rankings";
+    calculatePointsButton.textContent = is2nd ? "Resolve 2nd Innings" : "Resolve 1st Innings";
   } catch (error) {
     console.error(error);
     alert("Error resolving match scores.");
@@ -715,7 +743,10 @@ const resolveMatch = async () => {
 
 const renderDashboard = (results, actual, winnerName = null) => {
   const is2nd = Boolean(currentMeta.secondInnings);
-  resActualScoreLabel.textContent = is2nd ? `${winnerName.toUpperCase()} WIN (${actual})` : actual;
+  
+  // Format Actual Score label with winner if 2nd innings
+  const winDisplay = winnerName ? `${winnerName.toString().toUpperCase()} WIN ` : "";
+  resActualScoreLabel.textContent = is2nd ? `${winDisplay}(${actual})` : actual;
 
   resultsBody.innerHTML = results.map((r, i) => {
     let rankBadge = `<span class="rank-pill">${i + 1}</span>`;
@@ -724,7 +755,6 @@ const renderDashboard = (results, actual, winnerName = null) => {
     else if (i === 2) rankBadge = `<span class="rank-pill rank-3">3</span>`;
 
     const exactBadge = r.isExact ? `<span class="exact-tag">EXACT!</span>` : "";
-    const colorClass = r.points >= 50 ? "success" : (r.points > 0 ? "" : "danger");
 
     return `
       <tr>
@@ -776,26 +806,229 @@ exportCsvButton.addEventListener("click", downloadCSV);
 
 clearPrep2ndButton.addEventListener("click", async () => {
   const roomId = normalizeRoomId(roomIdInput.value.trim() || currentSettings.roomId);
-  if (!confirm("This will clear ALL current predictions to prepare for the 2nd Innings. This cannot be undone. Have you exported your CSV yet?")) return;
+  const is2nd = Boolean(currentMeta.secondInnings);
+  const label = is2nd ? "2nd" : "1st";
+
+  if (!confirm(`Finalize ${label} innings and archive results?`)) return;
 
   try {
     clearPrep2ndButton.disabled = true;
-    clearPrep2ndButton.textContent = "Clearing...";
+    clearPrep2ndButton.textContent = "Archiving...";
 
+    // 1. Archive Results to History
+    if (lastResults.length > 0) {
+      const historyPayload = {};
+      lastResults.forEach(r => {
+        historyPayload[r.clientId || `legacy-${r.name}`] = {
+          name: r.name,
+          points: r.points,
+          guess: r.guess,
+          predictedWinner: r.originalPrediction?.predictedWinner || ""
+        };
+      });
+      await saveInningsHistory(roomId, label, historyPayload);
+    }
+
+    // 2. Clear Live Predictions
     await clearRoomNode(roomId, "predictions");
+
+    // 3. Automated Stage Transition (Sync to Firebase)
+    if (!is2nd) {
+      const nextMeta = getFormMeta();
+      nextMeta.secondInnings = true;
+      
+      // Auto-Swap Batting Team: Flip from current batting team to the other
+      const currentBattingHome = !currentMeta.disableScoreA;
+      nextMeta.disableScoreA = currentBattingHome; 
+      nextMeta.disableScoreB = !currentBattingHome;
+
+      await saveRoomMeta(roomId, nextMeta);
+      alert("Results Archived! Stages switched and Batting Team swapped.");
+    } else {
+      alert("Match Finalized! View Final standings for full results.");
+    }
 
     resultsDashboard.classList.add("hidden");
     actualScoreInput.value = "";
-    alert("Match predictions cleared. You are ready for the 2nd Innings!");
-
+    actualResultInput.value = "";
+    
     clearPrep2ndButton.disabled = false;
-    clearPrep2ndButton.textContent = "Clear All & Prep 2nd Innings";
+    clearPrep2ndButton.textContent = is2nd ? "Resolve Room" : "Prep 2nd Innings";
+    updateResolutionVisibility();
   } catch (error) {
     console.error(error);
-    alert("Error clearing predictions.");
+    alert("Error finalizing stage.");
     clearPrep2ndButton.disabled = false;
-    clearPrep2ndButton.textContent = "Clear All & Prep 2nd Innings";
   }
 });
 
 loadInitialState();
+
+// --- Final Match & Combined Scoring Logic ---
+
+
+const viewFinalStandings = async () => {
+  if (!isFirebaseConfigured || !db || !currentSettings) return;
+  const roomId = normalizeRoomId(roomIdInput.value.trim() || currentSettings.roomId);
+
+  try {
+    viewFinalStandingsButton.disabled = true;
+    viewFinalStandingsButton.textContent = "Loading...";
+
+    const snapshot = await getOnce(roomRef(roomId, "innings_history"));
+    const history = snapshot.val() || {};
+    const h1 = history["1st"] || {};
+    const h2 = history["2nd"] || {};
+
+    // Grouping by Name (Case-Insensitive)
+    const combinedMap = new Map();
+
+    const mergeRecords = (data, isInnings1) => {
+      Object.entries(data).forEach(([cid, p]) => {
+        const rawName = (p.name || "Anonymous").toString().trim();
+        const key = rawName.toLowerCase();
+        
+        if (!combinedMap.has(key)) {
+          combinedMap.set(key, {
+            displayName: rawName,
+            p1: { pts: 0, winner: "" },
+            p2: { pts: 0, winner: "" }
+          });
+        }
+        
+        const rec = combinedMap.get(key);
+        if (isInnings1) {
+          rec.p1 = { pts: p.points || 0, winner: p.predictedWinner || "" };
+        } else {
+          rec.p2 = { pts: p.points || 0, winner: p.predictedWinner || "" };
+        }
+      });
+    };
+
+    mergeRecords(h1, true);
+    mergeRecords(h2, false);
+
+    const overall = Array.from(combinedMap.values()).map(rec => {
+      const p1 = rec.p1;
+      const p2 = rec.p2;
+
+      // Loyalty Penalty
+      let penalty = 0;
+      if (p1.winner && p2.winner && p1.winner.toLowerCase() !== p2.winner.toLowerCase()) {
+        penalty = -20;
+      }
+
+      return {
+        name: rec.displayName,
+        p1Score: p1.pts,
+        p1Winner: p1.winner,
+        p2Score: p2.pts,
+        p2Winner: p2.winner,
+        penalty,
+        total: Math.max(0, p1.pts + p2.pts + penalty)
+      };
+    });
+
+    overall.sort((a, b) => b.total - a.total);
+    lastOverallResults = overall;
+
+    renderOverallDashboard(overall);
+    viewFinalStandingsButton.disabled = false;
+    viewFinalStandingsButton.textContent = "View Final Game Standings";
+  } catch (error) {
+    console.error(error);
+    alert("Error fetching match standings. Have you resolved both innings?");
+    viewFinalStandingsButton.disabled = false;
+    viewFinalStandingsButton.textContent = "View Final Game Standings";
+  }
+};
+
+const renderOverallDashboard = (results) => {
+  overallMatchTitle.textContent = matchTitleInput.value || "T20 Match Series";
+  overallBody.innerHTML = results.map((r, i) => {
+    let rankBadge = `<span class="rank-pill">${i + 1}</span>`;
+    if (i === 0) rankBadge = `<span class="rank-pill rank-1">1</span>`;
+    else if (i === 1) rankBadge = `<span class="rank-pill rank-2">2</span>`;
+    else if (i === 2) rankBadge = `<span class="rank-pill rank-3">3</span>`;
+    
+    const penaltyHtml = r.penalty < 0 
+      ? `<span class="penalty-minus">${r.penalty}</span>` 
+      : `<span style="color:var(--text-secondary);">0</span>`;
+
+    return `
+      <tr>
+        <td>${rankBadge}</td>
+        <td style="font-weight:700;">${escapeHtml(r.name)}</td>
+        <td>
+          <div class="summary-item"><label>Winner: ${r.p1Winner || '---'}</label><span>${r.p1Score} pts</span></div>
+        </td>
+        <td>
+          <div class="summary-item"><label>Winner: ${r.p2Winner || '---'}</label><span>${r.p2Score} pts</span></div>
+        </td>
+        <td>${penaltyHtml}</td>
+        <td style="font-weight:800; font-size:18px;">${r.total}</td>
+      </tr>
+    `;
+  }).join("");
+
+  overallDashboard.classList.remove("hidden");
+};
+
+const downloadOverallCSV = () => {
+  if (lastOverallResults.length === 0) return;
+
+  const headers = ["Rank", "Name", "1st Inn Guess", "1st Inn Winner", "1st Inn Pts", "2nd Inn Guess", "2nd Inn Winner", "2nd Inn Pts", "Penalty", "Final Total"];
+  const rows = lastOverallResults.map((r, i) => [
+    i + 1,
+    r.name,
+    r.p1Guess,
+    r.p1Winner,
+    r.p1Score,
+    r.p2Guess,
+    r.p2Winner,
+    r.p2Score,
+    r.penalty,
+    r.total
+  ]);
+
+  const csvContent = [
+    headers.join(","),
+    ...rows.map(row => row.join(","))
+  ].join("\n");
+
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", `FullMatch_FinalStandings_${new Date().toLocaleDateString()}.csv`);
+  link.style.visibility = "hidden";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+const handleEndMatch = async () => {
+  if (!confirm("Are you sure you want to PERMANENTLY END the match and delete all scores and predictions? This cannot be undone.")) return;
+  
+  const roomId = normalizeRoomId(roomIdInput.value.trim() || currentSettings.roomId);
+  try {
+    endMatchButton.disabled = true;
+    endMatchButton.textContent = "Wiping Data...";
+    
+    await wipeMatchData(roomId);
+    
+    overallDashboard.classList.add("hidden");
+    alert("Match Data WIPED. The room is now fresh and ready for the next game.");
+    location.reload();
+  } catch (error) {
+    console.error(error);
+    alert("Error wiping match data.");
+    endMatchButton.disabled = false;
+    endMatchButton.textContent = "End Match & Wipe Data";
+  }
+};
+
+viewFinalStandingsButton.addEventListener("click", viewFinalStandings);
+closeOverallButton.addEventListener("click", () => overallDashboard.classList.add("hidden"));
+exportOverallCsvButton.addEventListener("click", downloadOverallCSV);
+endMatchButton.addEventListener("click", handleEndMatch);

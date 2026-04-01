@@ -93,7 +93,7 @@
         </section>
 
         <section class="panel-group">
-          <h2 class="group-title">Match Resolution</h2>
+          <h2 class="group-title" id="resSectionTitle">Match Resolution</h2>
           <div class="glass-card stack">
             <div id="resolution1st">
               <div class="form-row">
@@ -122,8 +122,11 @@
               </div>
             </div>
 
-            <button id="calculatePoints" class="secondary-btn wide-btn" type="button">Resolve & View Rankings</button>
-            <p class="panel-note">Resolve the current innings to calculate points and export to CSV.</p>
+            <div class="input-action-group">
+              <button id="calculatePoints" class="primary-btn">Resolve & View Rankings</button>
+              <button id="viewFinalStandings" class="action-btn">View Final Game Standings</button>
+            </div>
+            <p class="panel-note">Resolve the current innings to archive points and prepare for the final report.</p>
           </div>
         </section>
 
@@ -210,7 +213,7 @@
         <header class="results-header">
           <div>
             <span class="badge">Ranking Results</span>
-            <h2 id="resultsTitle">1st Innings Leaderboard</h2>
+            <h2 id="resultsTitle">Innings Leaderboard</h2>
           </div>
           <button id="closeResults" class="close-btn">&times;</button>
         </header>
@@ -241,9 +244,53 @@
         <footer class="results-footer">
           <div class="footer-actions">
             <button id="exportCsv" class="secondary-btn">Export to CSV</button>
-            <button id="clearAndPrep2nd" class="primary-btn">Clear All & Prep 2nd Innings</button>
+            <button id="clearAndPrep2nd" class="primary-btn">Prep 2nd Innings</button>
           </div>
-          <p class="footer-note">Clearing will remove all current predictions to prepare for the next innings.</p>
+          <p class="footer-note">Prep handles archiving 1st innings and switching teams for you.</p>
+        </footer>
+      </div>
+    </div>
+
+    <!-- Overall Standings Dashboard (Overlay) -->
+    <div id="overallDashboard" class="results-overlay hidden">
+      <div class="results-card glass-card">
+        <header class="results-header">
+          <div>
+            <span class="badge">Match Conclusion</span>
+            <h2 id="overallHeader">Final Match Report</h2>
+          </div>
+          <button id="closeOverall" class="close-btn">&times;</button>
+        </header>
+
+        <div class="results-summary">
+          <div class="summary-item">
+            <label>Tournament Scoreboard</label>
+            <span id="overallMatchTitle">Loading Game Stats...</span>
+          </div>
+        </div>
+
+        <div class="results-table-container">
+          <table class="results-table overall-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Name</th>
+                <th>1st Innings</th>
+                <th>2nd Innings</th>
+                <th>Penalty</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody id="overallBody"></tbody>
+          </table>
+        </div>
+
+        <footer class="results-footer">
+          <div class="footer-actions">
+            <button id="exportOverallCsv" class="secondary-btn">Export Full Match CSV</button>
+            <button id="endMatch" class="danger-btn">End Match & Wipe Data</button>
+          </div>
+          <p class="footer-note">Ending the match will permanently delete all history and predictions for this Room ID.</p>
         </footer>
       </div>
     </div>
