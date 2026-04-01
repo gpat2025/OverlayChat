@@ -10,6 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap"
       rel="stylesheet"
     />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     <link rel="stylesheet" href="./assets/styles.css" />
     <link rel="stylesheet" href="./assets/ui-overrides.css" />
   </head>
@@ -123,23 +124,52 @@
             </div>
 
             <form id="chatForm" class="chat-compose">
-              <label>
-                Message
+              <div class="chat-input-wrapper">
                 <textarea
                   id="chatMessage"
                   name="chatMessage"
-                  rows="3"
+                  rows="1"
                   maxlength="200"
                   placeholder="Back your team here..."
                   required
                 ></textarea>
-              </label>
-              <button type="submit" class="primary-btn">Send message</button>
+                <div class="chat-actions">
+                  <button type="button" id="toggleGifPicker" class="icon-btn" title="Send GIF">
+                    <i class="fa-solid fa-icons"></i>
+                  </button>
+                  <button type="submit" class="send-btn" title="Send Message">
+                    <i class="fa-solid fa-paper-plane"></i>
+                  </button>
+                </div>
+              </div>
             </form>
+
+            <!-- Integrated GIF Picker -->
+            <div id="gifPicker" class="gif-picker-container hidden">
+              <div class="gif-picker-header">
+                <div class="picker-tabs">
+                  <button type="button" class="tab-btn active" data-tab="trending">Trending</button>
+                  <button type="button" class="tab-btn" data-tab="search">Search</button>
+                </div>
+                <div class="search-bar hidden" id="pickerSearchBox">
+                  <input type="text" id="gifSearch" placeholder="Search Klipy..." />
+                  <i class="fa-solid fa-magnifying-glass"></i>
+                </div>
+              </div>
+              
+              <div class="gif-grid-viewport">
+                <div id="gifGrid" class="gif-grid">
+                  <div class="gif-placeholder">Loading trending...</div>
+                </div>
+              </div>
+
+
+            </div>
 
             <div class="chat-feed" id="chatFeed"></div>
           </section>
         </div>
+      </div>
       </div>
     </main>
 

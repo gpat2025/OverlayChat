@@ -1222,3 +1222,303 @@ body.desktop-embed .join-card {
 .ticker-shell .ticker-item {
   text-shadow: 0 1px 2px rgba(0,0,0,0.5);
 }
+
+/* --- GIF Reaction Styles --- */
+
+/* Audience UI */
+.gif-search-container {
+  margin-bottom: 16px;
+}
+
+#gifResults {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 10px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.gif-item {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  aspect-ratio: 1;
+  background: var(--panel-alt);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.gif-item:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border-color: var(--system-blue);
+  z-index: 2;
+}
+
+.gif-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Reaction Overlay — containerless square GIF */
+#reactionOverlay {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  z-index: 9999;
+  pointer-events: none;
+  background: transparent;
+}
+
+#reactionGif {
+  width: 100%;
+  flex: 1;
+  object-fit: cover;
+  aspect-ratio: 1 / 1;
+  display: block;
+  border-radius: 0;
+}
+
+.reaction-from {
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: left;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.reaction-from strong {
+  color: #fff;
+  font-weight: 700;
+}
+
+/* Animations */
+.fade-in {
+  animation: reactionFadeIn 0.6s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+
+.fade-out {
+  animation: reactionFadeOut 0.5s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+
+@keyframes reactionFadeIn {
+  0% { opacity: 0; transform: scale(0.9); filter: blur(10px); }
+  100% { opacity: 1; transform: scale(1); filter: blur(0); }
+}
+
+@keyframes reactionFadeOut {
+  0% { opacity: 1; transform: scale(1); filter: blur(0); }
+  100% { opacity: 0; transform: scale(1.05); filter: blur(10px); }
+}
+/* Chat Input Enhancements */
+.chat-input-wrapper {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  background: var(--surface-low);
+  border: 1px solid var(--border-subtle);
+  border-radius: 24px;
+  padding: 6px 12px;
+  transition: all 0.3s ease;
+}
+
+.chat-input-wrapper:focus-within {
+  border-color: var(--system-blue);
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.1);
+}
+
+#chatMessage {
+  background: transparent;
+  border: none;
+  resize: none;
+  padding: 8px 4px;
+  max-height: 120px;
+  font-family: inherit;
+  color: var(--text-primary);
+  width: 100%;
+}
+
+#chatMessage:focus {
+  outline: none;
+}
+
+.chat-actions {
+  display: flex;
+  gap: 4px;
+  padding-bottom: 4px;
+}
+
+.icon-btn, .send-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.icon-btn:hover {
+  background: var(--surface-medium);
+  color: var(--system-blue);
+}
+
+.send-btn {
+  color: var(--system-blue);
+}
+
+.send-btn:hover {
+  background: var(--system-blue);
+  color: white;
+}
+
+/* GIF Picker Layout */
+.gif-picker-container {
+  margin-bottom: 12px;
+  background: var(--surface-medium);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  max-height: 400px;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.gif-picker-header {
+  padding: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.picker-tabs {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.tab-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding-bottom: 4px;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.tab-btn.active {
+  color: var(--system-blue);
+  border-bottom-color: var(--system-blue);
+}
+
+.search-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+#gifSearch {
+  width: 100%;
+  background: var(--surface-low);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 8px 36px 8px 12px;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.search-bar i {
+  position: absolute;
+  right: 12px;
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+}
+
+.gif-grid-viewport {
+  overflow-y: auto;
+  padding: 8px;
+  flex: 1;
+}
+
+.gif-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 8px;
+}
+
+.gif-item {
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  aspect-ratio: 1;
+  background: var(--surface-low);
+}
+
+.gif-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.gif-item:hover img {
+  transform: scale(1.05);
+}
+
+/* Ad Banner */
+.picker-ad-banner {
+  padding: 8px 12px;
+  background: rgba(255, 215, 0, 0.05);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ad-label {
+  background: #FFD700;
+  color: #000;
+  font-size: 0.6rem;
+  font-weight: 900;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.ad-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.ad-content i {
+  color: #FFD700;
+}
+
+/* Chat Message with GIF */
+.chat-msg-content img {
+  max-width: 200px;
+  border-radius: 12px;
+  margin-top: 4px;
+  display: block;
+}

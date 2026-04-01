@@ -103,3 +103,11 @@ export const updateActiveSession = async (roomId) => {
     lastActive: serverTimestamp()
   });
 };
+
+export const sendReaction = async (roomId, payload) => {
+  const reactionRef = roomRef(roomId, "reaction");
+  await set(reactionRef, {
+    ...payload,
+    timestamp: serverTimestamp()
+  });
+};

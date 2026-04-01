@@ -48,6 +48,11 @@ const resetTickerBoundsButton = document.querySelector("#resetTickerBounds");
 const sortStatus = document.querySelector("#sortStatus");
 const toggleSortModeButton = document.querySelector("#toggleSortMode");
 const dotSort = document.querySelector("#dotSort");
+const clearReactionsButton = document.querySelector("#clearReactions");
+const showReactionButton = document.querySelector("#showReaction");
+const hideReactionButton = document.querySelector("#hideReaction");
+const reloadReactionButton = document.querySelector("#reloadReaction");
+const resetReactionBoundsButton = document.querySelector("#resetReactionBounds");
 
 // Win Probability Elements
 const googleMatchUrlInput = document.querySelector("#googleMatchUrl");
@@ -90,6 +95,12 @@ const setStatusText = (settings) => {
   }
   if (dotInteractivity) {
     dotInteractivity.className = `dot ${settings.clickThrough ? 'warning' : 'active'}`;
+  }
+
+  const reactionStatus = document.querySelector("#reactionStatus");
+  if (reactionStatus) {
+    reactionStatus.textContent = settings.reactionVisible ? "Visible" : "Hidden";
+    reactionStatus.className = `inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${settings.reactionVisible ? 'bg-green-400/10 text-green-400' : 'bg-red-400/10 text-red-400'}`;
   }
 
   roomIdInput.value = settings.roomId;
@@ -592,7 +603,18 @@ const handleClear = async (node, button) => {
 };
 
 clearPredictionsButton.addEventListener("click", () => handleClear("predictions", clearPredictionsButton));
-clearChatButton.addEventListener("click", () => handleClear("chat", clearChatButton));
+clearChatButton.addEventListener("click", () => handleChatClear());
+clearReactionsButton.addEventListener("click", () => handleClear("reaction", clearReactionsButton));
+
+const handleChatClear = async () => {
+    handleClear("chat", clearChatButton);
+};
+
+showReactionButton.addEventListener("click", () => window.overlayDesktop.showReaction());
+hideReactionButton.addEventListener("click", () => window.overlayDesktop.hideReaction());
+reloadReactionButton.addEventListener("click", () => window.overlayDesktop.reloadReaction());
+resetReactionBoundsButton.addEventListener("click", () => window.overlayDesktop.resetReactionBounds());
+
 
 // Match Resolution Logic
 const resolution1st = document.getElementById("resolution1st");

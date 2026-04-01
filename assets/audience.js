@@ -7,6 +7,7 @@ import {
   roomRef,
   savePrediction,
   sendChatMessage,
+  sendReaction,
   ref
 } from "./firebase.js";
 import {
@@ -49,6 +50,18 @@ const predictionSubmitButton = predictionForm?.querySelector("button[type='submi
 
 const activeDiscovery = document.querySelector("#activeDiscovery");
 const activeSessionsList = document.querySelector("#activeSessionsList");
+
+// Integrated GIF Picker UI
+const toggleGifPickerBtn = document.querySelector("#toggleGifPicker");
+const gifPickerContainer = document.querySelector("#gifPicker");
+const pickerSearchBox = document.querySelector("#pickerSearchBox");
+const tabBtns = document.querySelectorAll(".tab-btn");
+const gifSearchInput = document.querySelector("#gifSearch");
+const gifGrid = document.querySelector("#gifGrid");
+const reactionStatus = document.querySelector("#reactionStatus"); // Fallback for logs
+
+const KLIPY_API_KEY = "rwGYYILu8ZBT9xFPoSG2jUhq65JqUbryTlm4JXs8dWXxmR5GgGbEn5nrgvNxRCud";
+const KLIPY_BASE_URL = `https://api.klipy.com/api/v1`;
 
 let predictionLocked = false;
 let predictionsPaused = false;
@@ -230,19 +243,27 @@ const renderChat = (messages) => {
   }
 
   chatFeed.innerHTML = sortByTimestampAscending(messages, "createdAt")
+    .reverse()
     .map(
-      (message) => `
-        <article class="chat-message audience-chat-message">
-          <header>
-            <strong>${escapeHtml(message.name)}</strong>
-          </header>
-          <p>${escapeHtml(message.message)}</p>
-        </article>
-      `
+      (message) => {
+        const isGif = message.message && (message.message.startsWith("http") && (message.message.includes(".gif") || message.message.includes("klipy")));
+        const content = isGif 
+          ? `<div class="chat-msg-content"><img src="${message.message}" alt="Reaction GIF" loading="lazy" /></div>`
+          : `<p>${escapeHtml(message.message)}</p>`;
+          
+        return `
+          <article class="chat-message audience-chat-message ${isGif ? 'message-gif' : ''}">
+            <header>
+              <strong>${escapeHtml(message.name)}</strong>
+            </header>
+            ${content}
+          </article>
+        `;
+      }
     )
     .join("");
 
-  chatFeed.scrollTop = chatFeed.scrollHeight;
+  chatFeed.scrollTop = 0;
 };
 
 if (!roomSelected) {
@@ -446,7 +467,143 @@ chatForm?.addEventListener("submit", async (event) => {
     chatMessageInput.value = "";
     setStatus(chatStatus, "Message sent", "neutral");
   } catch (error) {
-    console.error(error);
     setStatus(chatStatus, "Message failed", "danger");
   }
 });
+
+// --- Integrated GIF Picker Logic ---
+
+const setReactionStatus = (text, tone = "default") => setStatus(chatStatus, text, tone);
+
+toggleGifPickerBtn?.addEventListener("click", () => {
+  const isHidden = gifPickerContainer.classList.contains("hidden");
+  setHidden(gifPickerContainer, !isHidden);
+  toggleGifPickerBtn.classList.toggle("active", isHidden);
+  
+  if (isHidden && !gifGrid.querySelector(".gif-item")) {
+    loadTrending();
+  }
+});
+
+const handleTabSwitch = (e) => {
+  const tab = e.target.dataset.tab;
+  tabBtns.forEach(btn => btn.classList.toggle("active", btn.dataset.tab === tab));
+  
+  if (tab === "search") {
+    pickerSearchBox.classList.remove("hidden");
+    gifSearchInput.focus();
+  } else {
+    pickerSearchBox.classList.add("hidden");
+    loadTrending();
+  }
+};
+
+tabBtns.forEach(btn => btn.addEventListener("click", handleTabSwitch));
+
+const fetchKlipy = async (endpoint, params = {}) => {
+  const url = new URL(`${KLIPY_BASE_URL}/${KLIPY_API_KEY}/${endpoint}`);
+  Object.keys(params).forEach(key => url.searchParams.append(key, params[key]));
+  
+  console.log("Fetching Klipy:", url.toString());
+  
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Klipy API error: ${response.status}`);
+  return await response.json();
+};
+
+const renderGifs = (gifs) => {
+  if (!gifs || gifs.length === 0) {
+    gifGrid.innerHTML = `<div class="empty-state">No GIFs found.</div>`;
+    return;
+  }
+
+  gifGrid.innerHTML = gifs.map(gif => {
+    // Klipy API nesting for individual GIF files: gif.file.sm.gif.url or gif.file.hd.gif.url
+    const gifUrl = gif.file?.sm?.gif?.url || gif.file?.hd?.gif?.url || gif.files?.gif?.url;
+    if (!gifUrl) return "";
+    
+    return `
+      <div class="gif-item" data-url="${gifUrl}" title="${escapeHtml(gif.title || "")}">
+        <img src="${gifUrl}" alt="${escapeHtml(gif.title || "")}" loading="lazy" />
+      </div>
+    `;
+  }).join("");
+
+  // Add click listeners to gif items
+  gifGrid.querySelectorAll(".gif-item").forEach(item => {
+    item.onclick = async () => {
+      const url = item.dataset.url;
+      const name = viewerNameInput.value.trim() || getRememberedViewerName() || "Anonymous";
+      
+      setReactionStatus("Sending GIF...");
+      try {
+        // 1. Send as Overlay Reaction
+        await sendReaction(roomId, {
+          url,
+          senderName: name
+        });
+        
+        // 2. Send as Chat Message
+        await sendChatMessage(roomId, {
+          clientId,
+          name,
+          message: url // Detecting image URLs in renderChat
+        });
+
+        // Close picker after sending
+        setHidden(gifPickerContainer, true);
+        toggleGifPickerBtn.classList.remove("active");
+        setReactionStatus("GIF Sent!", "neutral");
+        setTimeout(() => setReactionStatus("Ready"), 3000);
+      } catch (err) {
+        console.error(err);
+        setReactionStatus("Failed to send", "danger");
+      }
+    };
+  });
+};
+
+const loadTrending = async () => {
+  try {
+    const data = await fetchKlipy("gifs/trending", { limit: 12 });
+    // Klipy API nesting: data.data.data
+    const gifs = data?.data?.data || [];
+    renderGifs(gifs);
+  } catch (err) {
+    console.error(err);
+    gifGrid.innerHTML = `<div class="empty-state danger">Failed to load trending GIFs.</div>`;
+  }
+};
+
+const handleGifSearch = async () => {
+  const query = gifSearchInput.value.trim();
+  if (!query) {
+    loadTrending();
+    return;
+  }
+
+  setReactionStatus("Searching...");
+  try {
+    const data = await fetchKlipy("gifs/search", { q: query, limit: 12 });
+    // Klipy API nesting: data.data.data
+    const gifs = data?.data?.data || [];
+    renderGifs(gifs);
+    setReactionStatus("Ready");
+  } catch (err) {
+    console.error(err);
+    setReactionStatus("Search failed", "danger");
+  }
+};
+
+gifSearchInput?.addEventListener("input", (e) => {
+  // Simple debounce logic could be added here, but let's stick to keypress for now to avoid rapid API calls
+});
+
+gifSearchInput?.addEventListener("keypress", (e) => {
+  if (e.key === "Enter") handleGifSearch();
+});
+
+// Initial load
+if (roomSelected) {
+  // loadTrending(); // Now triggered on picker open to save bandwidth
+}

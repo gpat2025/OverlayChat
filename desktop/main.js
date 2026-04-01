@@ -22,12 +22,20 @@ const DEFAULT_SETTINGS = {
     height: 60,
     x: 100,
     y: 800
+  },
+  reactionVisible: true,
+  reactionBounds: {
+    width: 320,
+    height: 350,
+    x: 50,
+    y: 50
   }
 };
 
 let controlWindow = null;
 let overlayWindow = null;
 let tickerWindow = null;
+let reactionWindow = null;
 
 const settingsPath = () => path.join(app.getPath("userData"), "settings.json");
 
@@ -46,6 +54,14 @@ const loadSettings = () => {
       bounds: {
         ...DEFAULT_SETTINGS.bounds,
         ...(parsed.bounds || {})
+      },
+      tickerBounds: {
+        ...DEFAULT_SETTINGS.tickerBounds,
+        ...(parsed.tickerBounds || {})
+      },
+      reactionBounds: {
+        ...DEFAULT_SETTINGS.reactionBounds,
+        ...(parsed.reactionBounds || {})
       }
     };
   } catch (error) {
@@ -77,6 +93,12 @@ const loadTickerPage = (window) => {
   });
 };
 
+const loadReactionPage = (window) => {
+  window.loadFile(path.join(__dirname, "..", "reaction.html"), {
+    query: getOverlayQuery()
+  });
+};
+
 const broadcastState = () => {
   if (controlWindow && !controlWindow.isDestroyed()) {
     controlWindow.webContents.send("settings:changed", settings);
@@ -99,6 +121,13 @@ const applyOverlayFlags = () => {
     tickerWindow.setIgnoreMouseEvents(settings.clickThrough, { forward: true });
     tickerWindow.setOpacity(settings.opacity);
   }
+
+  if (reactionWindow && !reactionWindow.isDestroyed()) {
+    reactionWindow.setAlwaysOnTop(true, "screen-saver");
+    reactionWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    reactionWindow.setIgnoreMouseEvents(false);
+    reactionWindow.setOpacity(settings.opacity);
+  }
 };
 
 const persistTickerBounds = () => {
@@ -108,6 +137,22 @@ const persistTickerBounds = () => {
 
   const bounds = tickerWindow.getBounds();
   settings.tickerBounds = {
+    width: bounds.width,
+    height: bounds.height,
+    x: bounds.x,
+    y: bounds.y
+  };
+  saveSettings();
+  broadcastState();
+};
+
+const persistReactionBounds = () => {
+  if (!reactionWindow || reactionWindow.isDestroyed()) {
+    return;
+  }
+
+  const bounds = reactionWindow.getBounds();
+  settings.reactionBounds = {
     width: bounds.width,
     height: bounds.height,
     x: bounds.x,
@@ -230,6 +275,70 @@ const ensureTickerWindow = () => {
   return tickerWindow;
 };
 
+const ensureReactionWindow = () => {
+  if (reactionWindow && !reactionWindow.isDestroyed()) {
+    return reactionWindow;
+  }
+
+  reactionWindow = new BrowserWindow({
+    ...settings.reactionBounds,
+    show: false,
+    frame: false,
+    transparent: true,
+    hasShadow: false,
+    title: " ",
+    darkTheme: true,
+    roundedCorners: false,
+    autoHideMenuBar: true,
+    resizable: true,
+    movable: true,
+    focusable: true,
+    fullscreenable: false,
+    skipTaskbar: false,
+    minWidth: 150,
+    minHeight: 178,
+    backgroundColor: "#00000000",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+
+  loadReactionPage(reactionWindow);
+  reactionWindow.setMenuBarVisibility(false);
+  reactionWindow.removeMenu();
+  reactionWindow.on("page-title-updated", (e) => e.preventDefault());
+  
+  // Enforce square aspect ratio on resize (width = height - 28 for the from bar)
+  let resizing = false;
+  reactionWindow.on("resize", () => {
+    if (resizing) return;
+    resizing = true;
+    const [w, h] = reactionWindow.getSize();
+    const targetH = w + 28;
+    if (Math.abs(h - targetH) > 2) {
+      reactionWindow.setSize(w, targetH);
+    }
+    resizing = false;
+  });
+
+  reactionWindow.once("ready-to-show", () => {
+    applyOverlayFlags();
+    if (settings.reactionVisible) {
+      reactionWindow.showInactive();
+    }
+  });
+
+  reactionWindow.on("move", persistReactionBounds);
+  reactionWindow.on("resize", persistReactionBounds);
+  reactionWindow.on("closed", () => {
+    reactionWindow = null;
+  });
+
+  return reactionWindow;
+};
+
 const ensureControlWindow = () => {
   if (controlWindow && !controlWindow.isDestroyed()) {
     controlWindow.focus();
@@ -279,6 +388,10 @@ const updateSettings = (partial) => {
     loadTickerPage(tickerWindow);
   }
 
+  if (reactionWindow && !reactionWindow.isDestroyed()) {
+    loadReactionPage(reactionWindow);
+  }
+
   broadcastState();
   return settings;
 };
@@ -304,6 +417,9 @@ app.whenReady().then(() => {
   }
   if (settings.tickerVisible) {
     ensureTickerWindow();
+  }
+  if (settings.reactionVisible) {
+    ensureReactionWindow();
   }
   registerShortcuts();
 });
@@ -374,6 +490,41 @@ ipcMain.handle("ticker:hide", () => {
 ipcMain.handle("ticker:reload", () => {
   const window = ensureTickerWindow();
   loadTickerPage(window);
+  return settings;
+});
+
+ipcMain.handle("reaction:show", () => {
+  const window = ensureReactionWindow();
+  settings.reactionVisible = true;
+  saveSettings();
+  applyOverlayFlags();
+  window.showInactive();
+  broadcastState();
+  return settings;
+});
+
+ipcMain.handle("reaction:hide", () => {
+  if (reactionWindow && !reactionWindow.isDestroyed()) {
+    reactionWindow.hide();
+  }
+  settings.reactionVisible = false;
+  saveSettings();
+  broadcastState();
+  return settings;
+});
+
+ipcMain.handle("reaction:reload", () => {
+  const window = ensureReactionWindow();
+  loadReactionPage(window);
+  return settings;
+});
+
+ipcMain.handle("reaction:reset-bounds", () => {
+  settings.reactionBounds = { ...DEFAULT_SETTINGS.reactionBounds };
+  saveSettings();
+  const window = ensureReactionWindow();
+  window.setBounds(settings.reactionBounds);
+  broadcastState();
   return settings;
 });
 

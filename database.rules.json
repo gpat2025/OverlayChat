@@ -23,6 +23,10 @@
         "innings_history": {
           ".read": true,
           ".write": true
+        },
+        "reaction": {
+          ".read": true,
+          ".write": true
         }
       }
     },

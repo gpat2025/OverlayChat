@@ -528,3 +528,4 @@ if (!isFirebaseConfigured || !db) {
     renderChat(messages);
   });
 }
+

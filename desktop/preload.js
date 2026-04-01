@@ -15,6 +15,10 @@ contextBridge.exposeInMainWorld("overlayDesktop", {
   hideTicker: () => ipcRenderer.invoke("ticker:hide"),
   reloadTicker: () => ipcRenderer.invoke("ticker:reload"),
   resetTickerBounds: () => ipcRenderer.invoke("ticker:reset-bounds"),
+  showReaction: () => ipcRenderer.invoke("reaction:show"),
+  hideReaction: () => ipcRenderer.invoke("reaction:hide"),
+  reloadReaction: () => ipcRenderer.invoke("reaction:reload"),
+  resetReactionBounds: () => ipcRenderer.invoke("reaction:reset-bounds"),
   onSettingsChanged: (callback) => {
     ipcRenderer.on("settings:changed", (_event, value) => callback(value));
   },
