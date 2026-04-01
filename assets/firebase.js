@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getDatabase,
+  get,
   limitToLast,
   onValue,
   push,
@@ -20,7 +21,7 @@ if (isFirebaseConfigured) {
   db = getDatabase(app);
 }
 
-export { db, isFirebaseConfigured, onValue, query, limitToLast, ref };
+export { db, isFirebaseConfigured, onValue, query, limitToLast, ref, get };
 
 const roomPath = (roomId, child = "") =>
   child ? `rooms/${roomId}/${child}` : `rooms/${roomId}`;
@@ -31,6 +32,10 @@ export const roomRef = (roomId, child = "") => {
   }
 
   return ref(db, roomPath(roomId, child));
+};
+
+export const getOnce = async (ref) => {
+  return await get(ref);
 };
 
 export const savePrediction = async (roomId, clientId, payload) => {

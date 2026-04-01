@@ -204,6 +204,10 @@ body.desktop-embed {
   gap: 12px;
 }
 
+.stack-form .dual-row.single-col {
+  grid-template-columns: 1fr;
+}
+
 .stack-form input[type="number"] {
   text-align: center;
   font-weight: 700;

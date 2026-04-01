@@ -73,6 +73,13 @@
                 <input id="viewerName" name="viewerName" maxlength="30" required />
               </label>
 
+              <label>
+                Predicted winner
+                <select id="predictedWinner" name="predictedWinner" required>
+                  <option value="">Choose winner</option>
+                </select>
+              </label>
+
               <div class="dual-row">
                 <label>
                   <span id="labelScoreA">Team A Score</span>
@@ -101,13 +108,6 @@
                   />
                 </label>
               </div>
-
-              <label>
-                Predicted winner
-                <select id="predictedWinner" name="predictedWinner" required>
-                  <option value="">Choose winner</option>
-                </select>
-              </label>
 
               <button type="submit" class="primary-btn">Send prediction</button>
             </form>

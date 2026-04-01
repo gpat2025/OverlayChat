@@ -90,6 +90,18 @@
         </section>
 
         <section class="panel-group">
+          <h2 class="group-title">Match Resolution</h2>
+          <div class="glass-card stack">
+            <div class="form-row">
+              <label for="actualScore">Actual 1st Innings Score</label>
+              <input type="number" id="actualScore" placeholder="e.g. 158" min="1" max="999" />
+            </div>
+            <button id="calculatePoints" class="secondary-btn wide-btn" type="button">Resolve & View Rankings</button>
+            <p class="panel-note">Resolve the 1st innings to calculate points and export to CSV.</p>
+          </div>
+        </section>
+
+        <section class="panel-group">
           <h2 class="group-title">Window & Engine</h2>
           <div class="glass-card stack">
             <div class="control-row">
@@ -165,6 +177,50 @@
         </section>
       </div>
     </main>
+
+    <!-- Results Dashboard Overlay -->
+    <div id="resultsDashboard" class="results-overlay hidden">
+      <div class="results-content glass-card">
+        <header class="results-header">
+          <div>
+            <span class="badge">Ranking Results</span>
+            <h2 id="resultsTitle">1st Innings Leaderboard</h2>
+          </div>
+          <button id="closeResults" class="close-btn">&times;</button>
+        </header>
+
+        <div class="results-stats">
+          <div class="stat-pill">
+            Actual Score: <strong id="resActualScore">---</strong>
+          </div>
+        </div>
+
+        <div class="results-table-container">
+          <table class="results-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Name</th>
+                <th>Guess</th>
+                <th>Diff</th>
+                <th>Points</th>
+              </tr>
+            </thead>
+            <tbody id="resultsBody">
+              <!-- Result rows will be injected here -->
+            </tbody>
+          </table>
+        </div>
+
+        <footer class="results-footer">
+          <div class="footer-actions">
+            <button id="exportCsv" class="secondary-btn">Export to CSV</button>
+            <button id="clearAndPrep2nd" class="primary-btn">Clear All & Prep 2nd Innings</button>
+          </div>
+          <p class="footer-note">Clearing will remove all current predictions to prepare for the next innings.</p>
+        </footer>
+      </div>
+    </div>
 
     <script type="module" src="./control.js"></script>
   </body>

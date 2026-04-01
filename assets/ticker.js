@@ -74,14 +74,24 @@ const updateTickerDOM = () => {
           if (lowChaser === lowA) val = Number(p.scoreA) || 0;
           else val = Number(p.scoreB) || 0;
         } else {
-          // In 1st innings, use predicted winner's score
-          const winner = (p.winner || "").toString().trim().toLowerCase();
-          const lowA = teamA.toLowerCase();
-          const lowB = teamB.toLowerCase();
+          // 1st Innings logic
+          const hasA = !currentMeta.disableScoreA;
+          const hasB = !currentMeta.disableScoreB;
           
-          if (winner === lowA) val = Number(p.scoreA) || 0;
-          else if (winner === lowB) val = Number(p.scoreB) || 0;
-          else val = Math.max(Number(p.scoreA) || 0, Number(p.scoreB) || 0);
+          if (hasA && !hasB) {
+            val = Number(p.scoreA) || 0;
+          } else if (hasB && !hasA) {
+            val = Number(p.scoreB) || 0;
+          } else {
+            // Both active or both disabled: use predicted winner's score
+            const winner = (p.winner || "").toString().trim().toLowerCase();
+            const lowA = teamA.toLowerCase();
+            const lowB = teamB.toLowerCase();
+            
+            if (winner === lowA) val = Number(p.scoreA) || 0;
+            else if (winner === lowB) val = Number(p.scoreB) || 0;
+            else val = Math.max(Number(p.scoreA) || 0, Number(p.scoreB) || 0);
+          }
         }
 
         return val === 0 ? Infinity : val;

@@ -227,14 +227,24 @@ const renderPredictions = (predictions) => {
           if (lowChaser === lowA) val = Number(p.scoreA) || 0;
           else val = Number(p.scoreB) || 0;
         } else {
-          // In 1st innings, use predicted winner's score
-          const winner = (p.predictedWinner || "").toString().trim().toLowerCase();
-          const lowA = teamA.toLowerCase();
-          const lowB = teamB.toLowerCase();
+          // 1st Innings logic
+          const hasA = !meta.disableScoreA;
+          const hasB = !meta.disableScoreB;
           
-          if (winner === lowA) val = Number(p.scoreA) || 0;
-          else if (winner === lowB) val = Number(p.scoreB) || 0;
-          else val = Math.max(Number(p.scoreA) || 0, Number(p.scoreB) || 0);
+          if (hasA && !hasB) {
+            val = Number(p.scoreA) || 0;
+          } else if (hasB && !hasA) {
+            val = Number(p.scoreB) || 0;
+          } else {
+            // Both active (rare in 1st innings) or both disabled: use predicted winner's score
+            const winner = (p.predictedWinner || "").toString().trim().toLowerCase();
+            const lowA = teamA.toLowerCase();
+            const lowB = teamB.toLowerCase();
+            
+            if (winner === lowA) val = Number(p.scoreA) || 0;
+            else if (winner === lowB) val = Number(p.scoreB) || 0;
+            else val = Math.max(Number(p.scoreA) || 0, Number(p.scoreB) || 0);
+          }
         }
 
         // Put zero/null scores at the end of the sort

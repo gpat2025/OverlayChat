@@ -184,7 +184,7 @@ const updateInningsLabels = () => {
   // Toggle single column layout if one score is hidden
   const dualRow = document.querySelector(".dual-row");
   if (dualRow) {
-    const hasHidden = is2ndInnings && (Boolean(currentMeta.disableScoreA) || Boolean(currentMeta.disableScoreB));
+    const hasHidden = Boolean(currentMeta.disableScoreA) || Boolean(currentMeta.disableScoreB);
     dualRow.classList.toggle("single-col", hasHidden);
   }
 
@@ -195,8 +195,8 @@ const updateInningsLabels = () => {
     const isChaser = lowChaser === lowA;
     const isOversMode = is2ndInnings && isChaser && isChasingWinner;
     
-    // Requirement: Hide 1st innings score in 2nd innings
-    const isFinished = is2ndInnings && Boolean(currentMeta.disableScoreA);
+    // Requirement: Hide score field if disabled by executive
+    const isFinished = Boolean(currentMeta.disableScoreA);
     labelScoreA.parentElement.classList.toggle("hidden", isFinished);
 
     labelScoreA.textContent = isOversMode ? `${teamA} Overs` : `${teamA} Score`;
@@ -209,8 +209,8 @@ const updateInningsLabels = () => {
     const isChaser = lowChaser === lowB;
     const isOversMode = is2ndInnings && isChaser && isChasingWinner;
 
-    // Requirement: Hide 1st innings score in 2nd innings
-    const isFinished = is2ndInnings && Boolean(currentMeta.disableScoreB);
+    // Requirement: Hide score field if disabled by executive
+    const isFinished = Boolean(currentMeta.disableScoreB);
     labelScoreB.parentElement.classList.toggle("hidden", isFinished);
 
     labelScoreB.textContent = isOversMode ? `${teamB} Overs` : `${teamB} Score`;
