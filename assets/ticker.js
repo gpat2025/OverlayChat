@@ -1,5 +1,5 @@
 import { db, onValue, roomRef, query, limitToLast } from "./firebase.js";
-import { getRoomId, escapeHtml, applyTeamTheme } from "./shared.js";
+import { getRoomId, escapeHtml, applyTeamTheme, stripKlipyUrl } from "./shared.js";
 
 const roomId = getRoomId();
 const tickerContent = document.getElementById("tickerContent");
@@ -151,12 +151,25 @@ const updateTickerDOM = () => {
   }
 
   // 2. Recent Messages (Recent 1 min)
-  validMessages.forEach(msg => {
+  const chatMessages = validMessages.filter(msg => {
+    const stripped = stripKlipyUrl(msg.text);
+    const isKlipyOnly = msg.text && !stripped && (msg.text.includes("klipy.co") || msg.text.includes("klipy.com"));
+    return !isKlipyOnly;
+  });
+
+  chatMessages.forEach(msg => {
+    let mediaHtml = "";
+    if (msg.mediaUrl) {
+      mediaHtml = `<img src="${escapeHtml(msg.mediaUrl)}" style="height:24px; vertical-align:middle; border-radius:4px; margin-left: 6px;" alt="" />`;
+    }
+    
+    const strippedText = stripKlipyUrl(msg.text);
+
     items.push(`
       <span class="ticker-item message">
         <span class="ticker-badge">Chat</span>
         <strong>${escapeHtml(msg.user)}:</strong>
-        <span>${escapeHtml(msg.text)}</span>
+        <span>${escapeHtml(strippedText)}${mediaHtml}</span>
       </span>
     `);
   });
@@ -226,6 +239,7 @@ onValue(chatQuery, (snapshot) => {
       id,
       user: msg.name || "Guest",
       text: msg.message,
+      mediaUrl: msg.mediaUrl,
       timestamp: msg.createdAt || now
     }))
     .sort((a, b) => b.timestamp - a.timestamp); // Keep order consistent

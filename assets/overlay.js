@@ -15,7 +15,8 @@ import {
   setHidden,
   sortByTimestampDescending,
   applyTeamTheme,
-  getTeamLogoPath
+  getTeamLogoPath,
+  stripKlipyUrl
 } from "./shared.js";
 
 const params = new URLSearchParams(window.location.search);
@@ -425,7 +426,14 @@ const updateWinProb = () => {
 };
 
 const renderChat = (messages) => {
-  const recentMessages = sortByTimestampDescending(messages, "createdAt").slice(0, 5);
+  const filteredMessages = messages.filter(msg => {
+    const stripped = stripKlipyUrl(msg.message);
+    // If message is JUST a Klipy link, we don't show it in regular chat (it goes to Reaction overlay)
+    const isKlipyOnly = msg.message && !stripped && (msg.message.includes("klipy.co") || msg.message.includes("klipy.com"));
+    return !isKlipyOnly;
+  });
+
+  const recentMessages = sortByTimestampDescending(filteredMessages, "createdAt").slice(0, 5);
 
   if (!recentMessages.length) {
     overlayChatFeed.innerHTML = `<div class="empty-state overlay-empty">Chat will appear here.</div>`;
@@ -434,16 +442,32 @@ const renderChat = (messages) => {
 
   overlayChatFeed.innerHTML = recentMessages
     .map(
-      (message) => `
+      (message) => {
+        let mediaHtml = "";
+        if (message.mediaUrl) {
+           mediaHtml = `<div class="chat-media-wrapper" style="margin-top: 8px;"><img class="chat-media ${escapeHtml(message.mediaType || 'gifs')}" src="${escapeHtml(message.mediaUrl)}" alt="" style="max-width: 100%; border-radius: 8px;" /></div>`;
+        }
+        
+        const strippedMessage = stripKlipyUrl(message.message);
+        const isMsgOnlyKlipy = message.message && !strippedMessage && (message.message.includes("klipy.co") || message.message.includes("klipy.com"));
+        
+        // If it's only a Klipy link, we hide the name header for a cleaner media-only look
+        const headerHtml = isMsgOnlyKlipy 
+          ? "" 
+          : `<div class="chat-message-header">
+              <strong>${escapeHtml(message.name)}</strong>
+              <span class="card-time">${formatRelativeTime(message.createdAt)}</span>
+            </div>`;
+
+        return `
         <article class="overlay-message">
           ${adminActionMarkup("chat", message.id)}
-          <div class="chat-message-header">
-            <strong>${escapeHtml(message.name)}</strong>
-            <span class="card-time">${formatRelativeTime(message.createdAt)}</span>
-          </div>
-          <p>${escapeHtml(message.message)}</p>
+          ${headerHtml}
+          <p>${escapeHtml(strippedMessage)}</p>
+          ${mediaHtml}
         </article>
-      `
+      `;
+      }
     )
     .join("");
 };

@@ -185,3 +185,13 @@ export const oversToBalls = (val) => {
   const balls = Math.round((num - overs) * 10);
   return overs * 6 + balls;
 };
+
+/**
+ * Strips Klipy URLs from the message text to clean up the UI
+ * when media (GIFs/Stickers) are also being rendered separately.
+ */
+export const stripKlipyUrl = (text = "") => {
+  if (!text) return "";
+  // Handles klipy.co, klipy.com, static.klipy.com, etc.
+  return text.replace(/https?:\/\/(?:[a-zA-Z0-9-]+\.)*klipy\.(?:co|com)\/[^\s]+/g, "").trim();
+};

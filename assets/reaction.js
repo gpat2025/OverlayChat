@@ -23,7 +23,12 @@ if (!isFirebaseConfigured || !db) {
 } else {
   onValue(roomRef(roomId, "reaction"), (snapshot) => {
     const data = snapshot.val();
-    if (!data || !data.url || !data.timestamp) return;
+    
+    // If data is null, it means "Clear Reactions" was clicked
+    if (!data || !data.url || !data.timestamp) {
+      hideReaction();
+      return;
+    }
 
     // Only show if it's a new reaction (avoid re-triggering on initial load or duplicates)
     if (data.timestamp <= lastReactionTimestamp) return;
@@ -52,16 +57,24 @@ if (!isFirebaseConfigured || !db) {
     reactionOverlay.classList.add("fade-in");
 
     // Auto-hide after 20 seconds
-    reactionTimer = setTimeout(() => {
-      reactionOverlay.classList.remove("fade-in");
-      reactionOverlay.classList.add("fade-out");
-      
-      // Wait for animation to finish before hiding
-      setTimeout(() => {
-        if (reactionOverlay.classList.contains("fade-out")) {
-          setHidden(reactionOverlay, true);
-        }
-      }, 500); 
-    }, 20000);
+    reactionTimer = setTimeout(hideReaction, 20000);
+  };
+
+  const hideReaction = () => {
+    if (reactionTimer) clearTimeout(reactionTimer);
+    
+    reactionOverlay.classList.remove("fade-in");
+    reactionOverlay.classList.add("fade-out");
+    
+    // Wait for animation to finish before truly resetting
+    setTimeout(() => {
+      // Re-verify it's still fading out (no new reaction interrupted)
+      if (reactionOverlay.classList.contains("fade-out")) {
+        setHidden(reactionOverlay, true);
+        // [IMPORTANT] Explicitly clear content to support the "Clear Reactions" function
+        reactionGif.src = "";
+        reactionSender.textContent = "";
+      }
+    }, 500); 
   };
 }

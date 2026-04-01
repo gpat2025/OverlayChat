@@ -212,10 +212,23 @@
             <button id="toggleHideJoin" class="secondary-btn wide-btn">
               Hide Join Section
             </button>
+
+            <div class="divider"></div>
+            <div class="action-grid" style="margin-top: 12px;">
+              <button id="clearPredictions" class="glass-btn danger">Clear Predictions</button>
+              <button id="clearChat" class="glass-btn danger">Clear Chat</button>
+            </div>
           </div>
 
           <h2 class="group-title">GIF Reactions</h2>
           <div class="glass-card stack">
+            <div class="control-row">
+              <label>Reaction Opacity</label>
+              <div class="slider-group">
+                <input id="reactionOpacity" type="range" min="0" max="1" step="0.05" />
+                <span id="reactionOpacityValue" class="value-tag">100%</span>
+              </div>
+            </div>
             <p class="section-hint">Control the reaction window for Klipy GIFs.</p>
             <div class="action-grid">
               <button id="showReaction" class="glass-btn primary">Show Window</button>

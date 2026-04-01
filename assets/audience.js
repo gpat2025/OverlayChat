@@ -20,7 +20,8 @@ import {
   rememberViewerName,
   setHidden,
   sortByTimestampAscending,
-  applyTeamTheme
+  applyTeamTheme,
+  stripKlipyUrl
 } from "./shared.js";
 
 const roomId = getRoomId();
@@ -242,20 +243,38 @@ const renderChat = (messages) => {
     return;
   }
 
-  chatFeed.innerHTML = sortByTimestampAscending(messages, "createdAt")
+  const filteredMessages = messages.filter(msg => {
+    const stripped = stripKlipyUrl(msg.message);
+    const isKlipyOnly = msg.message && !stripped && (msg.message.includes("klipy.co") || msg.message.includes("klipy.com"));
+    return !isKlipyOnly;
+  });
+
+  // Find consecutive messages from the same user to group them
+  const sortedMessages = sortByTimestampAscending(filteredMessages, "createdAt");
+  
+  // Notice: reverse() puts the newest at the top, but Slack usually has newest at bottom.
+  // We'll keep the feed order as it was designed (newest at top) but just apply the styling.
+  chatFeed.innerHTML = sortedMessages
     .reverse()
     .map(
-      (message) => {
+      (message, idx, arr) => {
         const isGif = message.message && (message.message.startsWith("http") && (message.message.includes(".gif") || message.message.includes("klipy")));
+        const displayMessage = stripKlipyUrl(message.message);
+        const isKlipyOnly = message.message && !displayMessage && (message.message.includes("klipy.co") || message.message.includes("klipy.com"));
+        
         const content = isGif 
           ? `<div class="chat-msg-content"><img src="${message.message}" alt="Reaction GIF" loading="lazy" /></div>`
-          : `<p>${escapeHtml(message.message)}</p>`;
+          : `<div class="chat-msg-content"><p>${escapeHtml(displayMessage)}</p></div>`;
           
+        const isOwn = message.clientId && message.clientId === clientId;
+        const msgClass = isOwn ? 'own-message' : 'other-message';
+        
+        // Hide name if it's our own message OR if it's a Klipy-only reaction for cleaner look
+        const headerHtml = (isOwn || isKlipyOnly) ? '' : `<header><strong>${escapeHtml(message.name)}</strong></header>`;
+
         return `
-          <article class="chat-message audience-chat-message ${isGif ? 'message-gif' : ''}">
-            <header>
-              <strong>${escapeHtml(message.name)}</strong>
-            </header>
+          <article class="chat-message audience-chat-message ${msgClass} ${isGif ? 'message-gif' : ''}">
+            ${headerHtml}
             ${content}
           </article>
         `;
@@ -485,15 +504,19 @@ toggleGifPickerBtn?.addEventListener("click", () => {
   }
 });
 
+let currentMediaType = 'gifs';
+
 const handleTabSwitch = (e) => {
   const tab = e.target.dataset.tab;
+  if (!tab) return;
   tabBtns.forEach(btn => btn.classList.toggle("active", btn.dataset.tab === tab));
   
-  if (tab === "search") {
-    pickerSearchBox.classList.remove("hidden");
-    gifSearchInput.focus();
+  currentMediaType = tab;
+  
+  const query = gifSearchInput.value.trim();
+  if (query) {
+    handleGifSearch();
   } else {
-    pickerSearchBox.classList.add("hidden");
     loadTrending();
   }
 };
@@ -565,13 +588,13 @@ const renderGifs = (gifs) => {
 
 const loadTrending = async () => {
   try {
-    const data = await fetchKlipy("gifs/trending", { limit: 12 });
+    const data = await fetchKlipy(`${currentMediaType}/trending`, { limit: 12 });
     // Klipy API nesting: data.data.data
     const gifs = data?.data?.data || [];
     renderGifs(gifs);
   } catch (err) {
     console.error(err);
-    gifGrid.innerHTML = `<div class="empty-state danger">Failed to load trending GIFs.</div>`;
+    gifGrid.innerHTML = `<div class="empty-state danger">Failed to load trending ${currentMediaType}.</div>`;
   }
 };
 
@@ -584,7 +607,7 @@ const handleGifSearch = async () => {
 
   setReactionStatus("Searching...");
   try {
-    const data = await fetchKlipy("gifs/search", { q: query, limit: 12 });
+    const data = await fetchKlipy(`${currentMediaType}/search`, { q: query, limit: 12 });
     // Klipy API nesting: data.data.data
     const gifs = data?.data?.data || [];
     renderGifs(gifs);
