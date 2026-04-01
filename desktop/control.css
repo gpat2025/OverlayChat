@@ -624,26 +624,81 @@ input[type="range"]::-webkit-slider-thumb {
   transform: translateX(20px);
 }
 
-/* Results Dashboard Overlay */
-.results-overlay {
+.results-overlay.hidden, .modal.hidden {
+  display: none !important;
+}
+
+/* Generic Modal / Overlay Panel */
+.results-overlay, .modal {
   position: fixed;
   top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(12px);
-  display: flex;
+  display: flex !important;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 2000;
   opacity: 0;
   animation: fadeIn 0.3s forwards;
   padding: 20px;
 }
 
-.results-overlay.hidden {
+/* Modal Content Container */
+.history-content, .modal-content {
+  background: var(--glass-panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 20px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  transform: translateY(20px);
+  animation: slideUp 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  max-height: 95vh;
+  overflow: hidden;
+}
+
+/* Ensure history dashboard fits */
+#historyDashboard .history-content {
+  width: 95%;
+  max-width: 1200px;
+}
+
+/* Edit Icon on Match Item */
+.edit-item-btn {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--accent-blue);
+  color: white;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
   display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: none;
+  font-size: 14px;
+  transition: all 0.2s;
+  box-shadow: 0 4px 10px rgba(0, 122, 255, 0.3);
+}
+
+.match-item:hover .edit-item-btn, .match-item.active .edit-item-btn {
+  display: flex;
+}
+
+.edit-item-btn:hover {
+  background: white;
+  color: var(--accent-blue);
+  transform: translateY(-50%) scale(1.1);
+}
+
+.match-list.loading {
+  opacity: 0.5;
+  pointer-events: none;
+  filter: grayscale(1);
 }
 
 @keyframes fadeIn {

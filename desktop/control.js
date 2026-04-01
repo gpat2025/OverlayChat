@@ -89,6 +89,21 @@ const cancelManualSaveBtn = document.querySelector("#cancelManualSave");
 const manTeamAInput = document.querySelector("#manualTeamA");
 const manTeamBInput = document.querySelector("#manualTeamB");
 
+// Edit Match Elements
+const editMatchModal = document.querySelector("#editMatchModal");
+const editMatchTitle = document.querySelector("#editMatchTitle");
+const editMatchDate = document.querySelector("#editMatchDate");
+const editActual1st = document.querySelector("#editActual1st");
+const editActual2nd = document.querySelector("#editActual2nd");
+const editTeamA = document.querySelector("#editTeamA");
+const editTeamB = document.querySelector("#editTeamB");
+const editWinRadioA = document.querySelector("#editWinRadioA");
+const editWinRadioB = document.querySelector("#editWinRadioB");
+const editLabelA = document.querySelector("#editLabelA");
+const editLabelB = document.querySelector("#editLabelB");
+const cancelEditMatchBtn = document.querySelector("#cancelEditMatch");
+const saveEditMatchBtn = document.querySelector("#saveEditMatch");
+
 // Status Dots
 const dotOverlay = document.querySelector("#dotOverlay");
 const dotInteractivity = document.querySelector("#dotInteractivity");
@@ -765,7 +780,7 @@ const calculateInnings1Points = (prediction, actual, metaOverride = null) => {
   const diff = Math.abs(actual - predScore);
   if (diff === 0) return { points: 200, diff, rawDiff: 0, isExact: true, isNear5: true, isNear10: true, guess: predScore, mode: "Score" };
 
-  const base = Math.round(Math.max(0, 100 - (diff * 1.2)));
+  const base = Math.round(Math.max(0, 120 - (diff * 1.2)));
   const near5 = diff <= 5 ? 20 : 0;
   const near10 = diff <= 10 ? 10 : 0;
 
@@ -815,7 +830,7 @@ const calculateInnings2Points = (prediction, actualWinner, actualResult, metaOve
     return { points: 0, diff: "---", rawDiff: wrongDiff, guess: (predVal !== null && predVal !== undefined) ? predVal : "---", isExact: false, mode: "Wrong Winner" };
   }
 
-  let points = 40; // Base Reward for correct winner
+  let points = 0; // Removed 40 base for winner
   
   if (isChaserWinner) {
     const actualBalls = oversToBalls(actualResult);
@@ -836,13 +851,13 @@ const calculateInnings2Points = (prediction, actualWinner, actualResult, metaOve
     const predScore = Number(predVal || 0);
     const diff = Math.abs(actualScore - predScore);
 
-    // Max accuracy: 120
-    const accuracy = Math.round(Math.max(0, 120 - (diff * 1.5)));
+    // 1st Innings points: Base calculation (max 120 based on diff)
+    const base = Math.round(Math.max(0, 120 - (diff * 1.2)));
     const rangeBonusTier1 = (diff <= 5) ? 20 : 0;
     const rangeBonusTier2 = (diff <= 12) ? 10 : 0;
     const exactBonus = (diff === 0) ? 70 : 0;
 
-    points += accuracy + rangeBonusTier1 + rangeBonusTier2 + exactBonus;
+    points += base + rangeBonusTier1 + rangeBonusTier2 + exactBonus;
     return { points, diff: `${diff} runs`, rawDiff: diff, guess: predScore, isExact: diff === 0, mode: "Score" };
   }
 };
@@ -1221,6 +1236,309 @@ window.setSeasonSort = (mode) => {
   showSeasonStats();
 };
 
+// --- DATA MIGRATION: RECALCULATE HISTORY ---
+// Run this from the console: window.recalculateHistory()
+window.recalculateHistory = async () => {
+  const roomId = normalizeRoomId(roomIdInput.value.trim() || currentSettings.roomId);
+  if (!roomId) return console.error("No Room ID found.");
+
+  // Data provided by the user for historical matches
+  const manualResults = {
+    "2026-03-28": { actual1st: 201, actual2nd: "15.4", winner: "rcb" },
+    "2026-03-29": { actual1st: 220, actual2nd: "19.1", winner: "mi" },
+    "2026-03-30": { actual1st: 127, actual2nd: "12.1", winner: "rr" },
+    "2026-04-01": { actual1st: 141, actual2nd: "17.1", winner: "dc" }
+  };
+
+  console.log("Starting points recalculation...");
+  try {
+    const history = await getHistory(roomId);
+    if (!history) return console.log("No history found.");
+
+    for (const [dateKey, match] of Object.entries(history)) {
+      // Find the results for this match
+      // Try dateKey prefix (YYYY-MM-DD), then try stored matchResults
+      const datePart = dateKey.split("_")[0];
+      const res = manualResults[datePart] || match.matchResults;
+      
+      if (!res) {
+        console.warn(`Skipping match ${dateKey}: No result data found.`);
+        continue;
+      }
+
+      console.log(`Processing ${dateKey} (${match.matchTitle})...`);
+      const m = JSON.parse(JSON.stringify(match)); // Deep clone
+      
+      // Determine context (Batting order)
+      // Standard: Team A bats 1st, Team B bats 2nd
+      const meta1 = { teamA: m.teamA, teamB: m.teamB, disableScoreA: false, disableScoreB: true, secondInnings: false };
+      const meta2 = { teamA: m.teamA, teamB: m.teamB, disableScoreA: true, disableScoreB: false, secondInnings: true };
+
+      const actualWinner = res.winner || res.actualWinner;
+      const actual1st = res.actual1st;
+      const actual2nd = res.actual2nd;
+      const isOversMatch = actual2nd.toString().includes(".");
+
+      // Recalculate Innings 1
+      if (m.innings1) {
+        for (const pid in m.innings1) {
+          const p = m.innings1[pid];
+          // Re-construct prediction object for scoring engine
+          const pred = { scoreA: p.guess, scoreB: p.guess, predictedWinner: p.predictedWinner };
+          const stats = calculateInnings1Points(pred, actual1st, meta1);
+          m.innings1[pid] = { ...p, ...stats, points: stats.points };
+        }
+      }
+
+      // Recalculate Innings 2
+      if (m.innings2) {
+        for (const pid in m.innings2) {
+          const p = m.innings2[pid];
+          const pred = { scoreA: p.guess, scoreB: p.guess, predictedWinner: p.predictedWinner };
+          const stats = calculateInnings2Points(pred, actualWinner, actual2nd, meta2, isOversMatch);
+          m.innings2[pid] = { ...p, ...stats, points: stats.points };
+        }
+      }
+
+      // Update matchResults in record if missing (for future stability)
+      if (!m.matchResults) {
+        m.matchResults = { actual1st, actual2nd, actualWinner };
+      }
+
+      // Recalculate Final Standings
+      m.finalStandings = calculateMatchFinals(m.innings1, m.innings2);
+
+      // Save back
+      await archiveToHistory(roomId, dateKey, m);
+      console.log(`Successfully updated ${dateKey}`);
+    }
+
+    console.log("Recalculation Complete!");
+    alert("All historical points have been recalculated using the new formula. Refreshing standings...");
+    showSeasonStats();
+  } catch (err) {
+    console.error("Recalculation Failed:", err);
+    alert(`Error: ${err.message}`);
+  }
+};
+
+let editingMatchKey = null;
+
+window.openEditMatch = (key) => {
+  const match = fullHistory[key];
+  if (!match) return;
+  editingMatchKey = key;
+
+  const res = match.matchResults || {};
+  const dateStr = key.split("_")[0];
+
+  editMatchTitle.value = match.matchTitle || "";
+  editMatchDate.value = dateStr;
+  editTeamA.value = match.teamA || "Team A";
+  editTeamB.value = match.teamB || "Team B";
+  editActual1st.value = res.actual1st || "";
+  editActual2nd.value = res.actual2nd || "";
+
+  document.getElementById("editLabelA").textContent = editTeamA.value;
+  document.getElementById("editLabelB").textContent = editTeamB.value;
+
+  const winner = (res.actualWinner || res.winner || "").toLowerCase();
+  if (winner === editTeamA.value.toLowerCase()) editWinRadioA.checked = true;
+  else if (winner === editTeamB.value.toLowerCase()) editWinRadioB.checked = true;
+
+  editMatchModal.classList.remove("hidden");
+};
+
+const updateEditLabels = () => {
+  document.getElementById("editLabelA").textContent = editTeamA.value || "Team A";
+  document.getElementById("editLabelB").textContent = editTeamB.value || "Team B";
+};
+
+editTeamA.addEventListener("input", updateEditLabels);
+editTeamB.addEventListener("input", updateEditLabels);
+
+window.saveEditedMatch = async () => {
+  if (!editingMatchKey) return;
+  const roomId = normalizeRoomId(roomIdInput.value.trim() || currentSettings.roomId);
+  
+  const title = editMatchTitle.value.trim();
+  const date = editMatchDate.value;
+  const teamA = editTeamA.value.trim();
+  const teamB = editTeamB.value.trim();
+  const actual1st = Number(editActual1st.value);
+  const actual2nd = editActual2nd.value.trim();
+  const winnerVal = document.querySelector('input[name="editWinner"]:checked')?.value;
+  const actualWinner = (winnerVal === "a" ? teamA : teamB).toLowerCase();
+
+  if (!title || !date || !teamA || !teamB || isNaN(actual1st) || !actual2nd || !winnerVal) {
+    alert("Please fill all fields correctly.");
+    return;
+  }
+
+  try {
+    saveEditMatchBtn.disabled = true;
+    saveEditMatchBtn.textContent = "Recalculating...";
+    matchList.classList.add("loading");
+
+    const originalRecord = fullHistory[editingMatchKey];
+    if (!originalRecord) throw new Error("Original match record not found in memory.");
+
+    // Store original names for prediction-to-slot matching logic
+    const oldTeamA = (originalRecord.teamA || "Team A").toLowerCase();
+    const oldTeamB = (originalRecord.teamB || "Team B").toLowerCase();
+
+    const matchSnapshot = JSON.parse(JSON.stringify(originalRecord));
+    matchSnapshot.matchTitle = title;
+    matchSnapshot.teamA = teamA;
+    matchSnapshot.teamB = teamB;
+    matchSnapshot.matchResults = { actual1st, actual2nd, actualWinner };
+
+    const meta1 = { teamA, teamB, disableScoreA: false, disableScoreB: true, secondInnings: false };
+    const meta2 = { teamA, teamB, disableScoreA: true, disableScoreB: false, secondInnings: true };
+    const isOversMatch = actual2nd.includes(".");
+
+    // Helper to normalize the player's prediction to the NEW team names
+    // This solves the issue where renaming teams broke historical point calculations
+    const normalizePrediction = (p) => {
+      let predWinner = (p.predictedWinner || "").toLowerCase();
+      // If it matches the OLD Team A name, it's now meant for the NEW Team A slot
+      if (predWinner === oldTeamA) predWinner = teamA.toLowerCase();
+      else if (predWinner === oldTeamB) predWinner = teamB.toLowerCase();
+      
+      return {
+        scoreA: p.guess, 
+        scoreB: p.guess, 
+        predictedWinner: predWinner 
+      };
+    };
+
+    // Recalculate Innings 1
+    if (matchSnapshot.innings1) {
+      for (const pid in matchSnapshot.innings1) {
+        const p = matchSnapshot.innings1[pid];
+        const pred = normalizePrediction(p);
+        const stats = calculateInnings1Points(pred, actual1st, meta1);
+        matchSnapshot.innings1[pid] = { ...p, ...stats, points: stats.points };
+      }
+    }
+
+    // Recalculate Innings 2
+    if (matchSnapshot.innings2) {
+      for (const pid in matchSnapshot.innings2) {
+        const p = matchSnapshot.innings2[pid];
+        const pred = normalizePrediction(p);
+        const stats = calculateInnings2Points(pred, actualWinner, actual2nd, meta2, isOversMatch);
+        matchSnapshot.innings2[pid] = { ...p, ...stats, points: stats.points };
+      }
+    }
+
+    // Final standings refresh
+    matchSnapshot.finalStandings = calculateMatchFinals(matchSnapshot.innings1, matchSnapshot.innings2);
+
+    // Persistence Logic
+    const oldDateKey = editingMatchKey;
+    const newDateKey = `${date}_${oldDateKey.split("_")[1] || Date.now()}`;
+
+    // Update Firebase
+    if (oldDateKey !== newDateKey) {
+      await archiveToHistory(roomId, newDateKey, matchSnapshot);
+      await clearRoomNode(roomId, `history/${oldDateKey}`);
+    } else {
+      await archiveToHistory(roomId, oldDateKey, matchSnapshot);
+    }
+
+    // CRITICAL: Await the history refresh so fullHistory is updated before the modal closes
+    console.log("Saving complete. refreshing history...");
+    await openHistory(); 
+
+    // Update local reference to the new key if it changed
+    editingMatchKey = newDateKey;
+
+    editMatchModal.classList.add("hidden");
+    alert("Match updated and points recalculated!");
+    
+    // Select the match again to show latest results in detail view
+    window.selectArchivedMatch(newDateKey);
+
+  } catch (error) {
+    console.error("Save Edit Failed:", error);
+    alert("Error updating match: " + error.message);
+  } finally {
+    saveEditMatchBtn.disabled = false;
+    saveEditMatchBtn.textContent = "Save & Recalculate";
+    matchList.classList.remove("loading");
+  }
+};
+
+cancelEditMatchBtn.addEventListener("click", () => editMatchModal.classList.add("hidden"));
+saveEditMatchBtn.addEventListener("click", window.saveEditedMatch);
+
+window.selectArchivedMatch = (key) => {
+  const match = fullHistory[key];
+  if (!match) return;
+
+  // Active state
+  document.querySelectorAll(".match-item").forEach(el => el.classList.remove("active"));
+  document.getElementById(`item-${key}`)?.classList.add("active");
+
+  const buildTable = (data, title) => {
+    const rows = Object.values(data).sort((a, b) => (b.points || 0) - (a.points || 0));
+    return `
+      <div class="history-section">
+        <div class="history-section-title">${title}</div>
+        <table class="results-table">
+          <thead>
+            <tr><th>Name</th><th>Guess</th><th>Points</th></tr>
+          </thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr>
+                <td style="font-weight:700;">${escapeHtml(r.name)}</td>
+                <td>${r.guess}</td>
+                <td style="font-weight:800;">${r.points}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+
+  const finalRows = [...(match.finalStandings || [])].sort((a, b) => (b.total || 0) - (a.total || 0));
+  const finalTable = `
+    <div class="history-section">
+      <div class="history-section-title">Final Match Standings</div>
+      <table class="results-table">
+        <thead>
+          <tr><th>Name</th><th>1st Inn</th><th>2nd Inn</th><th>Penalty</th><th>Total</th></tr>
+        </thead>
+        <tbody>
+          ${finalRows.map(r => `
+            <tr>
+              <td style="font-weight:700;">${escapeHtml(r.name)}</td>
+              <td>${r.p1Score}</td>
+              <td>${r.p2Score}</td>
+              <td>${r.penalty}</td>
+              <td style="font-weight:800; font-size:16px; color:var(--accent-blue);">${r.total}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  matchDetail.innerHTML = `
+    <div class="stats-header" style="margin-bottom:15px;">
+      <div class="history-section-title" style="margin:0;">${escapeHtml(match.matchTitle)}</div>
+    </div>
+    <div class="history-grid">
+      ${finalTable}
+      ${buildTable(match.innings1 || {}, "1st Innings Rankings")}
+      ${buildTable(match.innings2 || {}, "2nd Innings Rankings")}
+    </div>
+  `;
+};
+
 const viewFinalStandings = async () => {
   if (!isFirebaseConfigured || !db || !currentSettings) return;
   const roomId = normalizeRoomId(roomIdInput.value.trim() || currentSettings.roomId);
@@ -1334,7 +1652,12 @@ const handleEndMatch = async () => {
       teamB: teamBInput.value || "Team B",
       innings1: h1,
       innings2: h2,
-      finalStandings: finalStandings
+      finalStandings: finalStandings,
+      matchResults: {
+        actual1st: Number(actualScoreInput.value),
+        actual2nd: actualResultInput.value,
+        actualWinner: document.querySelector('input[name="chaserWon"]:checked')?.value === "yes" ? (currentMeta.disableScoreA ? currentMeta.teamA : currentMeta.teamB) : (currentMeta.disableScoreA ? currentMeta.teamB : currentMeta.teamA)
+      }
     };
 
     await archiveToHistory(roomId, dateKey, archivePayload);
@@ -1381,9 +1704,12 @@ const renderMatchList = (history) => {
   matchList.innerHTML = matches.map(([key, match]) => {
     const dateStr = key.split("_")[0];
     return `
-      <div class="match-item" onclick="window.selectArchivedMatch('${key}')" id="item-${key}">
-        <label>${dateStr}</label>
-        <span>${escapeHtml(match.matchTitle)}</span>
+      <div class="match-item" onclick="window.selectArchivedMatch('${key}')" id="item-${key}" style="position:relative;">
+        <div>
+          <label>${dateStr}</label>
+          <span>${escapeHtml(match.matchTitle)}</span>
+        </div>
+        <button class="edit-item-btn" onclick="event.stopPropagation(); window.openEditMatch('${key}')" title="Edit Match Results">✎</button>
       </div>
     `;
   }).join("");
@@ -1559,7 +1885,12 @@ const saveManualMatch = async () => {
       teamA, teamB,
       innings1,
       innings2,
-      finalStandings
+      finalStandings,
+      matchResults: {
+        actual1st,
+        actual2nd,
+        actualWinner
+      }
     };
 
     const roomId = normalizeRoomId(roomIdInput.value.trim() || currentSettings.roomId);

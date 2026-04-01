@@ -495,6 +495,62 @@
       </div>
     </div>
 
+    <!-- Edit Historical Match Modal -->
+  <div id="editMatchModal" class="modal hidden">
+    <div class="modal-content manual-entry-content">
+      <div class="manual-layout" style="max-width: 600px; margin: 0 auto;">
+        <div class="manual-header">
+          <h2 style="margin:0;">Edit Match Results</h2>
+          <p style="color:var(--text-muted); font-size:12px; margin:5px 0 0 0;">Updating results will recalculate all player points for this match.</p>
+        </div>
+        
+        <div class="manual-form-grid" style="grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px;">
+          <div class="form-group" style="grid-column: span 2;">
+            <label>Match Title</label>
+            <input type="text" id="editMatchTitle" placeholder="#SRHvsRCB" />
+          </div>
+          <div class="form-group">
+            <label>Date</label>
+            <input type="date" id="editMatchDate" />
+          </div>
+          <div class="form-group">
+            <label>Actual 1st Innings Score</label>
+            <input type="number" id="editActual1st" placeholder="e.g. 185" />
+          </div>
+          <div class="form-group">
+            <label>Team A Name</label>
+            <input type="text" id="editTeamA" placeholder="Team A" />
+          </div>
+          <div class="form-group">
+            <label>Team B Name</label>
+            <input type="text" id="editTeamB" placeholder="Team B" />
+          </div>
+          <div class="form-group">
+            <label>Actual 2nd Innings Result</label>
+            <input type="text" id="editActual2nd" placeholder="e.g. 18.2 or 165" />
+          </div>
+          <div class="form-group">
+            <label>Actual Winner</label>
+            <div style="display:flex; gap:15px; margin-top:5px;">
+              <label style="display:flex; align-items:center; gap:5px; cursor:pointer;">
+                <input type="radio" name="editWinner" value="a" id="editWinRadioA"> <span id="editLabelA">Team A</span>
+              </label>
+              <label style="display:flex; align-items:center; gap:5px; cursor:pointer;">
+                <input type="radio" name="editWinner" value="b" id="editWinRadioB"> <span id="editLabelB">Team B</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="manual-actions" style="margin-top:25px; display:flex; justify-content:flex-end; gap:10px;">
+          <button id="cancelEditMatch" class="secondary-btn">Cancel</button>
+          <button id="saveEditMatch" class="primary-btn">Save & Recalculate</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/__/firebase/10.7.1/firebase-app-compat.js"></script>
     <script type="module" src="./control.js"></script>
   </body>
 </html>
