@@ -9,10 +9,19 @@
   <body>
     <main class="shell">
       <header class="app-header">
-        <div class="header-content">
-          <span class="badge">Desktop</span>
-          <h1>Overlay Executive</h1>
-          <p>Control the broadcast overlay in real-time.</p>
+        <div class="header-main">
+          <div class="header-content">
+            <span class="badge">Desktop</span>
+            <h1>Overlay Executive</h1>
+            <p>Control the broadcast overlay in real-time.</p>
+          </div>
+
+          <div class="header-controls">
+            <button id="mainViewHistoryBtn" class="action-btn pill">
+              <span class="btn-icon">📚</span>
+              View Match History
+            </button>
+          </div>
         </div>
       </header>
 
@@ -349,6 +358,139 @@
             <button id="endMatch" class="danger-btn">End Match & Wipe Data</button>
           </div>
           <p class="footer-note">Ending the match will permanently delete all history and predictions for this Room ID.</p>
+        </footer>
+      </div>
+    </div>
+
+    <!-- History Dashboard Overlay -->
+    <div id="historyDashboard" class="results-overlay hidden">
+      <div class="history-content glass-card">
+        <header class="results-header">
+          <div>
+            <span class="badge">Match Archive</span>
+            <h2 id="historyTitle">Daily Breakdowns</h2>
+          </div>
+          <div class="header-actions">
+            <button id="showManualEntry" class="primary-btn small">Add Manual Entry</button>
+            <button id="closeHistory" class="close-btn">&times;</button>
+          </div>
+        </header>
+
+        <div class="history-layout">
+          <aside class="history-sidebar">
+            <div class="sidebar-label">Overviews</div>
+            <div class="match-list" style="margin-bottom:20px;">
+              <div class="match-item active season-stats-item" onclick="window.showSeasonStats()" id="item-season-stats">
+                <label>Archive Total</label>
+                <span>🏆 Season Standings</span>
+              </div>
+            </div>
+
+            <div class="sidebar-label">Daily Matches</div>
+            <div id="matchList" class="match-list">
+              <!-- Matches will be listed here -->
+            </div>
+          </aside>
+
+          <main id="matchDetail" class="history-detail">
+            <!-- Content will be injected here: Leaderboard or Match Detail -->
+          </main>
+        </div>
+      </div>
+    </div>
+
+    <!-- Manual Match Entry Dashboard -->
+    <div id="manualEntryDashboard" class="results-overlay hidden">
+      <div class="history-content glass-card manual-entry-content">
+        <header class="results-header">
+          <div>
+            <span class="badge warning">Admin Tool</span>
+            <h2>Manual Match Resolve</h2>
+          </div>
+          <button id="closeManualEntry" class="close-btn">&times;</button>
+        </header>
+
+        <div class="manual-layout stack">
+          <!-- Match Setup Section -->
+          <div class="manual-section glass-card">
+            <div class="section-hint">Match Setup & Actual Results</div>
+            <div class="dual-row">
+              <div class="form-row">
+                <label>Date</label>
+                <input type="date" id="manualDate" />
+              </div>
+              <div class="form-row">
+                <label>Match Title</label>
+                <input type="text" id="manualTitle" placeholder="#RCBvsSRH" />
+              </div>
+            </div>
+            <div class="dual-row" style="margin-top:12px;">
+              <div class="form-row">
+                <label>Team A (Home)</label>
+                <input type="text" id="manualTeamA" placeholder="RCB" />
+              </div>
+              <div class="form-row">
+                <label>Team B (Away)</label>
+                <input type="text" id="manualTeamB" placeholder="SRH" />
+              </div>
+            </div>
+            <div class="divider" style="margin:20px 0;"></div>
+            <div class="dual-row">
+              <div class="form-row">
+                <label>Actual 1st Inn Score</label>
+                <input type="number" id="manualActual1st" placeholder="e.g. 201" />
+              </div>
+              <div class="form-row">
+                <label>Actual Winner</label>
+                <div class="radio-group">
+                  <div class="radio-option">
+                    <input type="radio" id="manWinA" name="manualWinner" value="a" checked />
+                    <label class="radio-label small" for="manWinA" id="manWinALabel">Team A</label>
+                  </div>
+                  <div class="radio-option">
+                    <input type="radio" id="manWinB" name="manualWinner" value="b" />
+                    <label class="radio-label small" for="manWinB" id="manWinBLabel">Team B</label>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="form-row" style="margin-top:12px;">
+              <label>Actual 2nd Inn Result (Score or Overs)</label>
+              <input type="text" id="manualActual2nd" placeholder="e.g. 15.4 or 145" />
+            </div>
+          </div>
+
+          <!-- Player Entry Section -->
+          <div class="manual-section glass-card">
+            <div class="stats-header">
+              <div class="section-hint">Player Predictions</div>
+              <button id="addManualRow" class="action-btn small">Add Player Row</button>
+            </div>
+            <div class="results-table-container" style="flex:1;">
+              <table class="results-table mini-table" id="manualPlayersTable">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>1st Inn Guess</th>
+                    <th>Winner Choice</th>
+                    <th>2nd Inn Guess</th>
+                    <th>Auto-Points</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="manualPlayersBody">
+                  <!-- Rows injected here -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <footer class="results-footer">
+          <div class="footer-actions">
+            <button id="cancelManualSave" class="secondary-btn">Cancel</button>
+            <button id="saveManualMatch" class="primary-btn">Calculate & Archive Match</button>
+          </div>
         </footer>
       </div>
     </div>

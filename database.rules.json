@@ -24,6 +24,10 @@
           ".read": true,
           ".write": true
         },
+        "history": {
+          ".read": true,
+          ".write": true
+        },
         "reaction": {
           ".read": true,
           ".write": true

@@ -74,6 +74,18 @@ export const getInningsHistory = async (roomId) => {
   return snapshot.val() || {};
 };
 
+export const archiveToHistory = async (roomId, dateKey, data) => {
+  await set(roomRef(roomId, `history/${dateKey}`), {
+    ...data,
+    archivedAt: serverTimestamp()
+  });
+};
+
+export const getHistory = async (roomId) => {
+  const snapshot = await get(roomRef(roomId, "history"));
+  return snapshot.val() || {};
+};
+
 export const wipeMatchData = async (roomId) => {
   await remove(roomRef(roomId, "predictions"));
   await remove(roomRef(roomId, "innings_history"));
