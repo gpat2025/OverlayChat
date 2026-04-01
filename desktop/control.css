@@ -188,6 +188,50 @@ input[readonly] {
   justify-content: space-between;
 }
 
+.win-prob-display {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  height: 48px;
+  flex: 1;
+  position: relative;
+  max-width: 200px;
+}
+
+.error-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 24px;
+  height: 24px;
+  background: #ffcc00; /* Vibrant Yellow */
+  color: #000;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 16px;
+  box-shadow: 0 0 12px rgba(255, 204, 0, 0.4);
+  z-index: 2;
+  animation: pulse-yellow 2s infinite;
+}
+
+@keyframes pulse-yellow {
+  0% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 0 0 rgba(255, 204, 0, 0.6); }
+  70% { transform: translate(-50%, -50%) scale(1.05); box-shadow: 0 0 0 8px rgba(255, 204, 0, 0); }
+  100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 0 0 rgba(255, 204, 0, 0); }
+}
+
+.win-prob-display .value-tag {
+  font-size: 16px;
+  letter-spacing: 0.02em;
+}
+
 .slider-group {
   display: flex;
   align-items: center;

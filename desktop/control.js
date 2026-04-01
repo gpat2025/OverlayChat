@@ -49,6 +49,17 @@ const sortStatus = document.querySelector("#sortStatus");
 const toggleSortModeButton = document.querySelector("#toggleSortMode");
 const dotSort = document.querySelector("#dotSort");
 
+// Win Probability Elements
+const googleMatchUrlInput = document.querySelector("#googleMatchUrl");
+const autoFetchWinProbToggle = document.querySelector("#autoFetchWinProb");
+const showWinProbToggle = document.querySelector("#showWinProb");
+const winProbValueLabel = null;
+const winProbError = null;
+const fetchNowBtn = document.querySelector("#fetchNowBtn");
+const fetchStatus = document.querySelector("#fetchStatus");
+const viewDebugBtn = document.querySelector("#viewDebugBtn");
+const solveCaptchaBtn = document.querySelector("#solveCaptchaBtn");
+
 let lastResults = [];
 let lastOverallResults = [];
 
@@ -122,7 +133,7 @@ const syncSortUi = () => {
     : "Sort by Score";
 
   if (dotSort) {
-    dotSort.className = `dot ${isScore ? 'warning' : 'active'}`;
+    dotSort.className = `dot ${isScore ? 'active' : 'warning'}`;
   }
 };
 
@@ -202,9 +213,86 @@ const subscribeToMeta = (roomId) => {
     syncChatUi();
     syncJoinUi();
     syncSortUi();
+    syncWinProbUi();
     updateResolutionVisibility();
   });
 };
+
+const syncWinProbUi = () => {
+  if (!currentMeta) return;
+  
+  const show = Boolean(currentMeta.showWinProb);
+  showWinProbToggle.checked = show;
+  
+  const probA = currentMeta.winProbabilityA !== undefined ? currentMeta.winProbabilityA : 50;
+  if (winProbError) winProbError.classList.add("hidden");
+  updateWinProbSliderLabel(probA);
+
+  if (currentMeta.googleMatchUrl) {
+    googleMatchUrlInput.value = currentMeta.googleMatchUrl;
+  }
+};
+
+const updateWinProbSliderLabel = (val) => {
+  if (!winProbValueLabel) return;
+  const probA = Number(val);
+  const probB = 100 - probA;
+  winProbValueLabel.textContent = `${probA}% / ${probB}%`;
+};
+
+// Automation Logic
+let winProbInterval = null;
+
+const startWinProbAutomation = () => {
+  if (winProbInterval) clearInterval(winProbInterval);
+  
+  winProbInterval = setInterval(async () => {
+    if (!autoFetchWinProbToggle.checked || !googleMatchUrlInput.value.trim()) return;
+    performWinProbFetch();
+  }, 30000); // 30 seconds
+};
+
+const performWinProbFetch = async () => {
+  const url = googleMatchUrlInput.value.trim();
+  if (!url) {
+    if (fetchStatus) fetchStatus.textContent = "Status: No URL provided";
+    return;
+  }
+  
+  if (fetchStatus) fetchStatus.textContent = "Status: Fetching...";
+  if (fetchNowBtn) fetchNowBtn.disabled = true;
+
+  try {
+    const result = await window.overlayDesktop.fetchWinProbability(url);
+    
+    if (result && result.probA && result.probB) {
+      const valA = parseInt(result.probA);
+      
+      // Update UI
+      if (winProbError) winProbError.classList.add("hidden");
+      if (fetchStatus) fetchStatus.textContent = `Status: Success (${result.probA} / ${result.probB})`;
+
+      if (isFirebaseConfigured && db) {
+        const roomId = normalizeRoomId(roomIdInput.value.trim());
+        await saveRoomMeta(roomId, {
+          winProbabilityA: valA,
+          winProbabilityB: 100 - valA
+        });
+      }
+    } else {
+      if (fetchStatus) fetchStatus.textContent = "Status: Failed (Widget not found)";
+      if (winProbError) winProbError.classList.remove("hidden");
+    }
+  } catch (error) {
+    console.error(error);
+    if (fetchStatus) fetchStatus.textContent = "Status: Error (Check console)";
+    if (winProbError) winProbError.classList.remove("hidden");
+  } finally {
+    if (fetchNowBtn) fetchNowBtn.disabled = false;
+  }
+};
+
+startWinProbAutomation();
 
 // Add listeners to update labels in real-time
 teamAInput.addEventListener("input", () => {
@@ -213,6 +301,50 @@ teamAInput.addEventListener("input", () => {
 teamBInput.addEventListener("input", () => {
   if (labelBattingB) labelBattingB.textContent = teamBInput.value.trim() || "Away Team";
 });
+
+// Slider event listeners removed as requested.
+
+showWinProbToggle.addEventListener("change", async () => {
+  if (isFirebaseConfigured && db) {
+    const roomId = normalizeRoomId(roomIdInput.value.trim());
+    await saveRoomMeta(roomId, {
+      showWinProb: showWinProbToggle.checked
+    });
+  }
+});
+
+googleMatchUrlInput.addEventListener("change", async () => {
+  if (isFirebaseConfigured && db) {
+    const roomId = normalizeRoomId(roomIdInput.value.trim());
+    await saveRoomMeta(roomId, {
+      googleMatchUrl: googleMatchUrlInput.value.trim()
+    });
+  }
+});
+
+fetchNowBtn.addEventListener("click", (e) => {
+  e.preventDefault();
+  performWinProbFetch();
+});
+
+if (viewDebugBtn) {
+  viewDebugBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    window.overlayDesktop.viewScraperDebug();
+  });
+}
+
+if (solveCaptchaBtn) {
+  solveCaptchaBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    const url = googleMatchUrlInput.value.trim();
+    if (url) {
+      window.overlayDesktop.openScraperSolver(url);
+    } else {
+      alert("Please paste the Google Match URL first.");
+    }
+  });
+}
 
 // Update Resolution UI immediately when toggles change
 document.querySelectorAll('input[name="innings"]').forEach(radio => {

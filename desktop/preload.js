@@ -21,5 +21,8 @@ contextBridge.exposeInMainWorld("overlayDesktop", {
   onOverlayUrl: (callback) => {
     ipcRenderer.on("overlay:url", (_event, value) => callback(value));
   },
-  clearNode: (roomId, node) => ipcRenderer.invoke("room:clear-node", roomId, node)
+  clearNode: (roomId, node) => ipcRenderer.invoke("room:clear-node", roomId, node),
+  fetchWinProbability: (url) => ipcRenderer.invoke("google:fetch-win-prob", url),
+  viewScraperDebug: () => ipcRenderer.invoke("scraper:view-debug"),
+  openScraperSolver: (url) => ipcRenderer.invoke("scraper:open-solver", url)
 });

@@ -3,15 +3,16 @@ some way to graph once we know the final score, each person's score should be in
 ~Ticker overlay option 
 some way to export data to csv/json
 ~2nd innings, if the prediction of the winning team is the chasing side, then accept float values with .0, .1, .2, .3, .4 or .5 as the decimal part and the int part betweren 0 to 20.0
+~Leaderboard over a game (2 inns)
 Leaderboard over a period of time
 ~color of UI based on team color : MI(#1E1E1E), CSK(#F44336), RCB(#2196F3), KKR(#4CAF50), SRH(#FF9800), PBKS(#F44336), DC(#2196F3), RR(#2196F3), GT(#2196F3), LSG(#2196F3) gradient between  home/away team
 ~sort by score 
+~add google prediction % probability
 
 
 later:
 - gif overlay
 - timed predictions (powerplay score, 16-20 score, number of wickets in x overs defined by admin as per game)
 - way to add predictions for prev games
-- add google prediction % probability
 
  

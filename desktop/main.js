@@ -237,7 +237,7 @@ const ensureControlWindow = () => {
   }
 
   controlWindow = new BrowserWindow({
-    width: 440,
+    width: 560,
     height: 760,
     minWidth: 420,
     minHeight: 720,
@@ -408,5 +408,144 @@ ipcMain.handle("external:open", (_event, url) => shell.openExternal(url));
 
 ipcMain.handle("clipboard:write-text", (_event, value) => {
   clipboard.writeText(value || "");
+  return true;
+});
+
+ipcMain.handle("google:fetch-win-prob", async (_event, url) => {
+  if (!url) return null;
+  
+  const scraperWindow = new BrowserWindow({
+    width: 1280,
+    height: 800,
+    show: false,
+    webPreferences: {
+      offscreen: true,
+      webSecurity: false, // Allows the scraper to see inside cross-origin iframes
+      contextIsolation: false // Simplifies cross-frame DOM access for scraping
+    }
+  });
+
+  // Set a real User-Agent to make it look like a regular browser
+  const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+  try {
+    await scraperWindow.loadURL(url, { userAgent });
+    
+    // Scraper script to recursively search ALL frames (iframes)
+    const script = `
+      new Promise(resolve => {
+        let attempts = 0;
+        const interval = setInterval(() => {
+          const findInFrame = (win) => {
+            try {
+              const doc = win.document;
+              
+              // 1. Try Specific Selectors (Immersive & Standard)
+              const selectors = [
+                ['.liveresults-sports-immersive__lr-imso-ss-wp-ft', '.liveresults-sports-immersive__lr-imso-ss-wp-st'],
+                ['.imso_mh__win-pr-p', '.imso_mh__win-pr-p'] // Note: Standard often uses dual results for same class
+              ];
+
+              for (const [selA, selB] of selectors) {
+                const els = Array.from(doc.querySelectorAll(selA + ',' + selB));
+                if (els.length >= 2) {
+                  const valA = els[0].innerText.match(/\\d+/);
+                  const valB = els[1].innerText.match(/\\d+/);
+                  if (valA && valB) {
+                    return { probA: valA[0] + '%', probB: valB[0] + '%' };
+                  }
+                }
+              }
+
+              // 2. Smart Pattern Fallback: Search for any text like "51%" and "49%"
+              const bodyText = doc.body.innerText;
+              const matches = bodyText.match(/(\\d+)%/g);
+              if (matches && matches.length >= 2) {
+                // If we found multiple percentages, try to find the pair most likely to be Win Prob
+                // Usually the pair that adds to ~100
+                for (let i = 0; i < matches.length - 1; i++) {
+                  const v1 = parseInt(matches[i]);
+                  const v2 = parseInt(matches[i+1]);
+                  if (v1 + v2 === 100 || (v1 + v2 > 98 && v1 + v2 < 102)) {
+                    return { probA: v1 + '%', probB: v2 + '%' };
+                  }
+                }
+              }
+            } catch (e) { return null; }
+            return null;
+          };
+
+          const searchAllFrames = (win) => {
+            let res = findInFrame(win);
+            if (res) return res;
+            
+            for (let i = 0; i < win.frames.length; i++) {
+              try {
+                const frameRes = searchAllFrames(win.frames[i]);
+                if (frameRes) return frameRes;
+              } catch (e) {}
+            }
+            return null;
+          };
+
+          const finalResult = searchAllFrames(window);
+
+          if (finalResult || attempts > 25) {
+            clearInterval(interval);
+            resolve(finalResult || null);
+          }
+          attempts++;
+        }, 1000); // 1 second intervals for reliability
+      });
+    `;
+
+    const result = await scraperWindow.webContents.executeJavaScript(script);
+
+    // Save debug screenshot
+    const image = await scraperWindow.webContents.capturePage();
+    const debugPath = path.join(app.getPath("userData"), "scraper_debug.png");
+    fs.writeFileSync(debugPath, image.toPNG());
+
+    scraperWindow.destroy();
+    return result;
+  } catch (error) {
+    console.error("Scraper Error:", error);
+    if (!scraperWindow.isDestroyed()) {
+      const image = await scraperWindow.webContents.capturePage();
+      const debugPath = path.join(app.getPath("userData"), "scraper_debug.png");
+      fs.writeFileSync(debugPath, image.toPNG());
+      scraperWindow.destroy();
+    }
+    return null;
+  }
+});
+
+ipcMain.handle("scraper:view-debug", () => {
+  const debugPath = path.join(app.getPath("userData"), "scraper_debug.png");
+  if (fs.existsSync(debugPath)) {
+    shell.openPath(debugPath);
+    return true;
+  }
+  return false;
+});
+
+ipcMain.handle("scraper:open-solver", (_event, url) => {
+  if (!url) return false;
+  
+  const solverWindow = new BrowserWindow({
+    width: 600,
+    height: 700,
+    show: true,
+    title: "Google CAPTCHA Solver",
+    autoHideMenuBar: true,
+    webPreferences: {
+      webSecurity: false
+    }
+  });
+
+  solverWindow.loadURL(url, {
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  });
+
   return true;
 });

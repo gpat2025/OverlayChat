@@ -131,6 +131,48 @@
         </section>
 
         <section class="panel-group">
+          <h2 class="group-title">Live Win Probability (Google)</h2>
+          <div class="glass-card stack">
+            <div class="form-row">
+              <label for="googleMatchUrl">Google Match URL</label>
+              <div class="input-action-group">
+                <input type="text" id="googleMatchUrl" placeholder="Paste Google URL here..." />
+                <button id="fetchNowBtn" class="action-btn">Fetch Now</button>
+              </div>
+              <div class="form-row items-center gap-2" style="margin-top: 8px;">
+                <span id="fetchStatus" class="panel-note" style="margin-top: 0;">Status: Not started</span>
+                <button id="viewDebugBtn" class="glass-btn small" title="View screenshot of what the scraper sees" style="padding: 4px 8px; font-size: 10px;">View Debug</button>
+                <button id="solveCaptchaBtn" class="action-btn small" title="Solve Google CAPTCHA" style="padding: 4px 8px; font-size: 10px;">Solve CAPTCHA</button>
+              </div>
+            </div>
+            
+            <div class="form-row">
+              <label class="toggle-row">
+                <span>Auto-Fetch (30s)</span>
+                <input type="checkbox" id="autoFetchWinProb" class="toggle-input" />
+                <div class="toggle-track"></div>
+              </label>
+            </div>
+
+            <div class="form-row">
+              <label class="toggle-row">
+                <span>Show on Overlay</span>
+                <input type="checkbox" id="showWinProb" class="toggle-input" />
+                <div class="toggle-track"></div>
+              </label>
+            </div>
+
+            <div class="divider"></div>
+            
+            <div class="control-row">
+
+            </div>
+            
+            <p class="panel-note">Slider updates automatically if Auto-Fetch is on. You can also slide it manually to override.</p>
+          </div>
+        </section>
+
+        <section class="panel-group">
           <h2 class="group-title">Window & Engine</h2>
           <div class="glass-card stack">
             <div class="control-row">

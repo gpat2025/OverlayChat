@@ -8,6 +8,41 @@
     <link rel="stylesheet" href="./assets/styles.css" />
     <link rel="stylesheet" href="./assets/ui-overrides.css" />
     <style>
+      .win-prob-section {
+        margin-top: 10px;
+        padding: 12px 14px !important;
+        animation: fadeIn 0.4s ease-out;
+        border-top: none !important;
+      }
+      .win-prob-title {
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 0.15em;
+        text-align: center;
+        color: rgba(255,255,255,0.4);
+        margin-top: 10px;
+        text-transform: uppercase;
+      }
+      .win-prob-section .team-label {
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .win-prob-section .percent-label {
+        font-size: 10px;
+      }
+      .win-prob-section .graph-track {
+        height: 5px;
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(4px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .text-right { text-align: right; }
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(4px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
       body.desktop-embed .overlay-widget {
         border-radius: 34px;
       }
@@ -51,6 +86,35 @@
           </div>
           <div class="graph-track">
             <div id="graphFill" class="graph-fill" style="width: 50%"></div>
+          </div>
+        </div>
+
+        <div id="winProbOverlay" class="overlay-ribbon win-prob-ribbon hidden">
+          <div class="overlay-ribbon-header">
+            <span class="section-title win-prob-title">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              <span>Win Probability</span>
+            </span>
+          </div>
+
+          <div class="prediction-graph">
+            <div class="graph-labels">
+              <span id="winProbTeamA" class="team-label">Team A</span>
+              <span id="winProbValueTag" class="percent-label">50% / 50%</span>
+              <span id="winProbTeamB" class="team-label">Team B</span>
+            </div>
+            <div class="graph-track">
+              <div id="winProbFill" class="win-prob-fill graph-fill" style="width: 50%"></div>
+            </div>
           </div>
         </div>
 

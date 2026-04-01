@@ -35,6 +35,12 @@ const teamALabel = document.querySelector("#teamALabel");
 const teamBLabel = document.querySelector("#teamBLabel");
 const graphPercent = document.querySelector("#graphPercent");
 const graphFill = document.querySelector("#graphFill");
+const winProbOverlay = document.querySelector("#winProbOverlay");
+const winProbTeamA = document.querySelector("#winProbTeamA");
+const winProbTeamB = document.querySelector("#winProbTeamB");
+const winProbValA = document.querySelector("#winProbValA");
+const winProbValB = document.querySelector("#winProbValB");
+const winProbFill = document.querySelector("#winProbFill");
 
 const overlayPositionKey = `overlaychat-overlay-position-${roomId}`;
 const defaultPosition = { left: 24, top: 24 };
@@ -391,6 +397,33 @@ const updateGraph = () => {
   graphPercent.textContent = `${percentA}% / ${percentB}%`;
 };
 
+const updateWinProb = () => {
+  if (!currentMeta) return;
+
+  const show = Boolean(currentMeta.showWinProb);
+  setHidden(winProbOverlay, !show);
+
+  if (show) {
+    const teamA = (currentMeta.teamA || "Team A").trim();
+    const teamB = (currentMeta.teamB || "Team B").trim();
+    const probA = currentMeta.winProbabilityA || 50;
+    const probB = currentMeta.winProbabilityB || 100 - probA;
+
+    const logoA = getTeamLogoPath(teamA);
+    const logoB = getTeamLogoPath(teamB);
+
+    winProbTeamA.innerHTML = logoA ? `<img src="${logoA}" class="team-logo-inline" alt="" /> ${escapeHtml(teamA)}` : escapeHtml(teamA);
+    winProbTeamB.innerHTML = logoB ? `${escapeHtml(teamB)} <img src="${logoB}" class="team-logo-inline" alt="" />` : escapeHtml(teamB);
+    
+    const winProbValueTag = document.querySelector("#winProbValueTag");
+    if (winProbValueTag) {
+      winProbValueTag.textContent = `${probA}% / ${probB}%`;
+    }
+    
+    winProbFill.style.width = `${probA}%`;
+  }
+};
+
 const renderChat = (messages) => {
   const recentMessages = sortByTimestampDescending(messages, "createdAt").slice(0, 5);
 
@@ -480,6 +513,7 @@ if (!isFirebaseConfigured || !db) {
     document.body.classList.toggle("join-hidden", !!meta.hideJoin);
     applyTeamTheme(meta.teamA, meta.teamB);
     updateGraph();
+    updateWinProb();
     if (currentPredictions && currentPredictions.length > 0) {
       renderPredictions(currentPredictions);
     }
