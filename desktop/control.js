@@ -31,6 +31,8 @@ const audienceUrlInput = document.querySelector("#audienceUrl");
 const copyAudienceUrlButton = document.querySelector("#copyAudienceUrl");
 const opacityInput = document.querySelector("#opacity");
 const opacityValue = document.querySelector("#opacityValue");
+const reactionOpacityInput = document.querySelector("#reactionOpacity");
+const reactionOpacityValue = document.querySelector("#reactionOpacityValue");
 const overlayStatus = document.querySelector("#overlayStatus");
 const clickThroughStatus = document.querySelector("#clickThroughStatus");
 const predictionPauseStatus = document.querySelector("#predictionPauseStatus");
@@ -141,6 +143,13 @@ const setStatusText = (settings) => {
 
   roomIdInput.value = settings.roomId;
   opacityInput.value = settings.opacity;
+  
+  if (reactionOpacityInput) {
+    const reactOp = settings.reactionOpacity !== undefined ? settings.reactionOpacity : settings.opacity;
+    reactionOpacityInput.value = reactOp;
+    reactionOpacityValue.textContent = `${Math.round(reactOp * 100)}%`;
+  }
+
   audienceUrlInput.value = getAudienceEntryUrl();
 };
 
@@ -479,6 +488,14 @@ opacityInput.addEventListener("input", async () => {
   setStatusText(await window.overlayDesktop.updateSettings({ opacity }));
 });
 
+if (reactionOpacityInput) {
+  reactionOpacityInput.addEventListener("input", async () => {
+    const reactionOpacity = Number(reactionOpacityInput.value);
+    reactionOpacityValue.textContent = `${Math.round(reactionOpacity * 100)}%`;
+    setStatusText(await window.overlayDesktop.updateSettings({ reactionOpacity }));
+  });
+}
+
 copyAudienceUrlButton.addEventListener("click", copyAudienceUrl);
 
 togglePredictionPauseButton.addEventListener("click", async () => {
@@ -608,12 +625,34 @@ resetTickerBoundsButton.addEventListener("click", async () => {
   setStatusText(await window.overlayDesktop.resetTickerBounds());
 });
 
+if (showReactionButton) {
+  showReactionButton.addEventListener("click", async () => {
+    setStatusText(await window.overlayDesktop.showReaction());
+  });
+}
+if (hideReactionButton) {
+  hideReactionButton.addEventListener("click", async () => {
+    setStatusText(await window.overlayDesktop.hideReaction());
+  });
+}
+if (reloadReactionButton) {
+  reloadReactionButton.addEventListener("click", async () => {
+    setStatusText(await window.overlayDesktop.reloadReaction());
+  });
+}
+if (resetReactionBoundsButton) {
+  resetReactionBoundsButton.addEventListener("click", async () => {
+    setStatusText(await window.overlayDesktop.resetReactionBounds());
+  });
+}
+
 window.overlayDesktop.onSettingsChanged((settings) => {
   setStatusText(settings);
   subscribeToMeta(settings.roomId);
   updateSeasonLeaderboard();
 });
 
+// --- CLEAR HANDLERS ---
 const handleClear = async (node, button) => {
   if (!isFirebaseConfigured || !db || !currentSettings) return;
   const originalText = button.textContent;
@@ -641,17 +680,9 @@ const handleClear = async (node, button) => {
 };
 
 clearPredictionsButton.addEventListener("click", () => handleClear("predictions", clearPredictionsButton));
-clearChatButton.addEventListener("click", () => handleChatClear());
+clearChatButton.addEventListener("click", () => handleClear("chat", clearChatButton));
 clearReactionsButton.addEventListener("click", () => handleClear("reaction", clearReactionsButton));
 
-const handleChatClear = async () => {
-  handleClear("chat", clearChatButton);
-};
-
-showReactionButton.addEventListener("click", () => window.overlayDesktop.showReaction());
-hideReactionButton.addEventListener("click", () => window.overlayDesktop.hideReaction());
-reloadReactionButton.addEventListener("click", () => window.overlayDesktop.reloadReaction());
-resetReactionBoundsButton.addEventListener("click", () => window.overlayDesktop.resetReactionBounds());
 
 
 // Match Resolution Logic

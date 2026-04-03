@@ -1,5 +1,5 @@
 :root {
-  --bg: #000000;
+  --bg: #0a0a0c;
   --system-blue: #0A84FF;
   --system-red: #FF453A;
   --system-green: #30D158;
@@ -348,25 +348,65 @@ button:hover {
 }
 
 .chat-feed {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   margin-top: 18px;
   padding-right: 6px;
+  padding-bottom: 24px;
 }
 
-.chat-message,
 .prediction-card {
   border-radius: 18px;
   border: 1px solid var(--panel-border);
   background: rgba(255, 255, 255, 0.05);
 }
 
+.chat-message {
+  display: flex;
+  flex-direction: column;
+  max-width: 85%;
+  width: fit-content;
+  padding: 12px 16px;
+  border-radius: 20px;
+  animation: slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.chat-message.own-message {
+  align-self: flex-end;
+  background: var(--system-blue);
+  color: #ffffff;
+  border-bottom-right-radius: 4px;
+}
+
+.chat-message.other-message {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border-bottom-left-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08); /* slight border for definition */
+}
+
+.chat-message strong {
+  font-size: 0.85rem;
+  margin-bottom: 4px;
+  opacity: 0.85;
+  display: inline-block;
+}
+
+.chat-message.own-message strong {
+  display: none; /* Hide name for own messages like iMessage/Slack */
+}
+
 .chat-message p,
 .prediction-card p {
   margin: 0;
   line-height: 1.45;
+  font-size: 0.95rem;
 }
+
 
 .empty-state {
   padding: 24px;
@@ -1318,31 +1358,46 @@ body.desktop-embed .join-card {
   100% { opacity: 0; transform: scale(1.05); filter: blur(10px); }
 }
 /* Chat Input Enhancements */
+.chat-compose {
+  position: relative;
+  padding-top: 8px;
+  margin-top: auto;
+}
+
 .chat-input-wrapper {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 8px;
-  background: var(--surface-low);
-  border: 1px solid var(--border-subtle);
-  border-radius: 24px;
-  padding: 6px 12px;
-  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+  padding: 8px 16px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .chat-input-wrapper:focus-within {
   border-color: var(--system-blue);
-  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.1);
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 6px 16px rgba(0, 113, 227, 0.2);
+  transform: translateY(-1px);
 }
 
 #chatMessage {
   background: transparent;
   border: none;
   resize: none;
-  padding: 8px 4px;
-  max-height: 120px;
+  padding: 8px 0;
+  max-height: 80px;
   font-family: inherit;
-  color: var(--text-primary);
+  color: #ffffff;
   width: 100%;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+#chatMessage::placeholder {
+  color: rgba(255, 255, 255, 0.4);
 }
 
 #chatMessage:focus {
@@ -1352,7 +1407,7 @@ body.desktop-embed .join-card {
 .chat-actions {
   display: flex;
   gap: 4px;
-  padding-bottom: 4px;
+  align-items: center;
 }
 
 .icon-btn, .send-btn {

@@ -10,6 +10,7 @@ const DEFAULT_SETTINGS = {
   clickThrough: false,
   overlayVisible: true,
   opacity: 1,
+  reactionOpacity: 1,
   bounds: {
     width: 462,
     height: 924,
@@ -126,7 +127,8 @@ const applyOverlayFlags = () => {
     reactionWindow.setAlwaysOnTop(true, "screen-saver");
     reactionWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     reactionWindow.setIgnoreMouseEvents(false);
-    reactionWindow.setOpacity(settings.opacity);
+    const reactOp = settings.reactionOpacity !== undefined ? settings.reactionOpacity : settings.opacity;
+    reactionWindow.setOpacity(reactOp);
   }
 };
 

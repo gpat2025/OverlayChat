@@ -530,8 +530,24 @@ const fetchKlipy = async (endpoint, params = {}) => {
   console.log("Fetching Klipy:", url.toString());
   
   const response = await fetch(url);
-  if (!response.ok) throw new Error(`Klipy API error: ${response.status}`);
-  return await response.json();
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "No error details available");
+    console.error("Klipy API error response:", errorText);
+    throw new Error(`Klipy API error: ${response.status}`);
+  }
+  
+  const text = await response.text();
+  if (!text || text.trim() === "") {
+    console.warn("Klipy API returned empty response body.");
+    return { data: [] };
+  }
+  
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    console.error("Failed to parse Klipy JSON:", text.substring(0, 500));
+    throw new Error("Klipy API returned invalid JSON.");
+  }
 };
 
 const renderGifs = (gifs) => {
@@ -541,8 +557,10 @@ const renderGifs = (gifs) => {
   }
 
   gifGrid.innerHTML = gifs.map(gif => {
-    // Klipy API nesting for individual GIF files: gif.file.sm.gif.url or gif.file.hd.gif.url
-    const gifUrl = gif.file?.sm?.gif?.url || gif.file?.hd?.gif?.url || gif.files?.gif?.url;
+    // Klipy API media structures:
+    // GIFs: gif.file.sm.gif.url
+    // Stickers: gif.png.url or gif.webm.url
+    const gifUrl = gif.file?.sm?.gif?.url || gif.file?.hd?.gif?.url || gif.files?.gif?.url || gif.png?.url || gif.webm?.url;
     if (!gifUrl) return "";
     
     return `
@@ -589,8 +607,8 @@ const renderGifs = (gifs) => {
 const loadTrending = async () => {
   try {
     const data = await fetchKlipy(`${currentMediaType}/trending`, { limit: 12 });
-    // Klipy API nesting: data.data.data
-    const gifs = data?.data?.data || [];
+    // Robust Klipy nesting check: can be data.data or data.data.data
+    const gifs = Array.isArray(data?.data) ? data.data : (data?.data?.data || []);
     renderGifs(gifs);
   } catch (err) {
     console.error(err);
@@ -608,8 +626,8 @@ const handleGifSearch = async () => {
   setReactionStatus("Searching...");
   try {
     const data = await fetchKlipy(`${currentMediaType}/search`, { q: query, limit: 12 });
-    // Klipy API nesting: data.data.data
-    const gifs = data?.data?.data || [];
+    // Robust Klipy nesting check: can be data.data or data.data.data
+    const gifs = Array.isArray(data?.data) ? data.data : (data?.data?.data || []);
     renderGifs(gifs);
     setReactionStatus("Ready");
   } catch (err) {
