@@ -363,6 +363,10 @@ const ensureControlWindow = () => {
 
   controlWindow.loadFile(path.join(__dirname, "control.html"));
   controlWindow.on("closed", () => {
+    // Destroy all associated windows when the control panel is closed
+    if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.destroy();
+    if (tickerWindow && !tickerWindow.isDestroyed()) tickerWindow.destroy();
+    if (reactionWindow && !reactionWindow.isDestroyed()) reactionWindow.destroy();
     controlWindow = null;
   });
 
