@@ -226,3 +226,33 @@ export const stripKlipyUrl = (text = "") => {
   // Handles klipy.co, klipy.com, static.klipy.com, etc.
   return text.replace(/https?:\/\/(?:[a-zA-Z0-9-]+\.)*klipy\.(?:co|com)\/[^\s]+/g, "").trim();
 };
+/**
+ * Standardized sorting for match history collections (Firebase history node).
+ * Ensures latest matches (like 2026-04-07) are at the top.
+ */
+export const sortHistoryLatestFirst = (historyObj = {}) => {
+  return Object.entries(historyObj).sort((a, b) => {
+    const parseToIso = (idStr) => {
+      const datePart = idStr.split("_")[0];
+      const parts = datePart.split("-");
+      
+      if (parts.length === 3) {
+        // If it's YYYY-MM-DD
+        if (parts[0].length === 4) return datePart;
+        // If it's legacy DD-MM-YYYY -> convert to YYYY-MM-DD for sorting
+        return `${parts[2]}-${parts[1]}-${parts[0]}`;
+      }
+      return "0000-00-00";
+    };
+
+    const isoA = parseToIso(a[0]);
+    const isoB = parseToIso(b[0]);
+
+    if (isoA !== isoB) {
+      return isoB.localeCompare(isoA);
+    }
+    
+    // Secondary sort by full suffix (timestamp/Manual) descending
+    return b[0].localeCompare(a[0]);
+  });
+};

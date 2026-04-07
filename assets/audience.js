@@ -21,7 +21,8 @@ import {
   setHidden,
   sortByTimestampAscending,
   applyTeamTheme,
-  stripKlipyUrl
+  stripKlipyUrl,
+  sortHistoryLatestFirst
 } from "./shared.js";
 
 const roomId = getRoomId();
@@ -798,19 +799,7 @@ const renderHistoryList = () => {
   }
 
   // Parse and sort history by date descending
-  const historyEntries = Object.entries(localHistory).map(([key, data]) => ({ id: key, ...data }));
-  
-  // Custom sort to parse the prepended date DD-MM-YYYY
-  historyEntries.sort((a, b) => {
-    const parseDateStr = (idStr) => {
-      const parts = idStr.split("_")[0].split("-");
-      if (parts.length === 3) {
-        return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
-      }
-      return 0; // fallback
-    };
-    return parseDateStr(b.id) - parseDateStr(a.id);
-  });
+  const historyEntries = sortHistoryLatestFirst(localHistory).map(([key, data]) => ({ id: key, ...data }));
 
   if (historyEntries.length === 0 && !showLiveGame) {
     html += `<div class="empty-state">No daily updates explicitly finalized yet.</div>`;

@@ -69,4 +69,7 @@ node_modules/
 .dataconnect
 dist/
 
+# tmp files/folders
+tmp/
+
 # assets/firebase-config.js

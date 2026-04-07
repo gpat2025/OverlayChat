@@ -17,7 +17,7 @@ import {
   wipeMatchData,
   saveSeasonLeaderboard
 } from "../assets/firebase.js";
-import { getAudienceEntryUrl, escapeHtml } from "../assets/shared.js";
+import { getAudienceEntryUrl, escapeHtml, sortHistoryLatestFirst } from "../assets/shared.js";
 
 const settingsForm = document.querySelector("#settingsForm");
 const roomIdInput = document.querySelector("#roomId");
@@ -1792,7 +1792,7 @@ const openHistory = async () => {
 };
 
 const renderMatchList = (history) => {
-  const matches = Object.entries(history).sort((a, b) => b[0].localeCompare(a[0])); // Newest first
+  const matches = sortHistoryLatestFirst(history);
 
   if (matches.length === 0) {
     matchList.innerHTML = `<div class="panel-note">No archived matches found.</div>`;
