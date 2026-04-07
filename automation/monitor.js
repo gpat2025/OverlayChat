@@ -31,7 +31,7 @@ const setupFirebase = () => {
     if (!admin.apps.length) {
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
-        databaseURL: `https://${serviceAccount.project_id}-default-rtdb.firebaseio.com`
+        databaseURL: `https://overlaychat-bf2c1-default-rtdb.asia-southeast1.firebasedatabase.app`
       });
     }
   } catch (err) {
