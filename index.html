@@ -179,16 +179,17 @@
     <div id="leaderboardModal" class="dashboard-overlay hidden">
       <div class="dashboard-container">
         <header class="dashboard-header">
-          <div class="header-left">
-            <span class="header-label">Hall of Fame</span>
-            <h2>Season Leaderboard</h2>
+          <div class="header-nav-tabs">
+            <button class="modal-nav-tab active" data-view="season">Season Standings</button>
+            <button class="modal-nav-tab" data-view="daily">Daily Updates</button>
           </div>
           <button class="close-btn" id="closeLeaderboard">
             <i class="fa-solid fa-xmark"></i>
           </button>
         </header>
 
-        <div class="dashboard-content">
+        <!-- Season View -->
+        <div class="dashboard-content" id="seasonView">
           <div class="leaderboard-tabs">
             <button class="l-tab active" data-mode="total">Total Points</button>
             <button class="l-tab" data-mode="ppg">Points Per Match</button>
@@ -211,6 +212,43 @@
             </table>
           </div>
         </div>
+
+        <!-- Daily Updates View (Match List) -->
+        <div class="dashboard-content hidden" id="dailyView">
+          <div class="daily-header">
+            <h3>Recent Matches</h3>
+          </div>
+          <div class="history-list" id="historyList">
+            <!-- Archival dates rendered here -->
+          </div>
+        </div>
+
+        <!-- Match Detail View -->
+        <div class="dashboard-content hidden" id="matchDetailView">
+          <div class="detail-header">
+            <button class="ghost-btn" id="backToDailyBtn">
+              <i class="fa-solid fa-arrow-left"></i> Back
+            </button>
+            <h3 id="matchDetailTitle">Match Details</h3>
+          </div>
+          <div class="leaderboard-scroll">
+            <table class="leaderboard-table detail-table">
+              <thead>
+                <tr>
+                  <th>Player</th>
+                  <th>1st Innings</th>
+                  <th>2nd Innings</th>
+                  <th>Pen</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody id="matchDetailList">
+                <!-- Specific match stats go here -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </div>
     </div>
 

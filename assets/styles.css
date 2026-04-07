@@ -140,6 +140,11 @@ body.desktop-embed {
   display: flex;
   gap: 20px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+#viewLeaderboard {
+  margin-left: auto;
 }
 
 .grid-two {
@@ -1734,6 +1739,29 @@ body.desktop-embed .join-card {
   border-bottom: 1px solid var(--panel-border);
 }
 
+.header-nav-tabs {
+  display: flex;
+  gap: 16px;
+}
+
+.modal-nav-tab {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  padding: 0 0 4px;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.modal-nav-tab.active {
+  color: #fff;
+  border-bottom-color: var(--system-blue);
+}
+
 .header-label {
   font-size: 0.75rem;
   text-transform: uppercase;
@@ -1871,4 +1899,78 @@ body.desktop-embed .join-card {
   font-weight: 500;
   margin-top: 2px;
   display: block;
+}
+
+/* History List / Daily Updates */
+.daily-header, .detail-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.daily-header h3, .detail-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #fff;
+}
+
+.detail-header {
+  gap: 16px;
+}
+
+.history-list {
+  display: grid;
+  gap: 12px;
+}
+
+.history-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.history-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--system-blue);
+  transform: translateY(-2px);
+}
+
+.hcard-left {
+  display: grid;
+  gap: 4px;
+}
+
+.hcard-date {
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.hcard-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.hcard-arrow {
+  color: var(--muted);
+  font-size: 1.1rem;
+}
+
+/* Detail Table specific tweaks */
+.detail-table th, .detail-table td {
+  padding: 12px 10px;
+}
+
+.detail-table td .dim {
+  color: var(--muted);
+  font-size: 0.85rem;
 }

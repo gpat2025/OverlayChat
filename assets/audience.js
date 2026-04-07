@@ -67,6 +67,19 @@ const closeLeaderboardBtn = document.querySelector("#closeLeaderboard");
 const leaderboardModal = document.querySelector("#leaderboardModal");
 const leaderboardList = document.querySelector("#leaderboardList");
 
+// Daily Updates UI
+const seasonView = document.querySelector("#seasonView");
+const dailyView = document.querySelector("#dailyView");
+const matchDetailView = document.querySelector("#matchDetailView");
+const historyListContainer = document.querySelector("#historyList");
+const matchDetailList = document.querySelector("#matchDetailList");
+const matchDetailTitle = document.querySelector("#matchDetailTitle");
+const backToDailyBtn = document.querySelector("#backToDailyBtn");
+const modalNavTabs = document.querySelectorAll(".modal-nav-tab");
+
+let localHistory = {};
+let activePredictions = {};
+
 const KLIPY_API_KEY = "rwGYYILu8ZBT9xFPoSG2jUhq65JqUbryTlm4JXs8dWXxmR5GgGbEn5nrgvNxRCud";
 const KLIPY_BASE_URL = `https://api.klipy.com/api/v1`;
 
@@ -378,8 +391,19 @@ if (!roomSelected) {
       // We don't have meta yet here usually, but syncPredictionAccess will be called by meta listener
     });
 
+    // --- History Listener ---
+    onValue(roomRef(roomId, "history"), (snapshot) => {
+      localHistory = snapshot.val() || {};
+      if (!dailyView.classList.contains("hidden")) {
+        renderHistoryList();
+      }
+    });
+
     onValue(roomRef(roomId, "predictions"), (snapshot) => {
-      const predictions = Object.values(snapshot.val() || {});
+      const rawPreds = snapshot.val() || {};
+      activePredictions = rawPreds;
+      
+      const predictions = Object.values(rawPreds);
       const tally = formatWinnerCounts(predictions);
       const summary = Object.entries(tally)
         .map(([winner, count]) => `${winner}: ${count}`)
@@ -387,6 +411,11 @@ if (!roomSelected) {
 
       if (!predictionsPaused && (!predictionLocked || allowReprediction)) {
         setStatus(predictionStatus, summary || "Live");
+      }
+
+      // If we are currently looking at the live match details in the modal, re-render it
+      if (!matchDetailView.classList.contains("hidden") && matchDetailTitle.dataset.matchId === "live") {
+        renderMatchDetails("live");
       }
     });
   }
@@ -724,6 +753,150 @@ document.querySelectorAll(".l-tab").forEach(tab => {
     renderLeaderboard(localStandings);
   });
 });
+
+// Modal Nav Tab Listeners
+modalNavTabs.forEach(tab => {
+  tab.addEventListener("click", (e) => {
+    const viewName = e.target.dataset.view;
+    if (!viewName) return;
+
+    modalNavTabs.forEach(t => t.classList.remove("active"));
+    e.target.classList.add("active");
+
+    setHidden(seasonView, viewName !== "season");
+    setHidden(dailyView, viewName !== "daily");
+    setHidden(matchDetailView, true); // always hide details when switching top tabs
+
+    if (viewName === "daily") {
+      renderHistoryList();
+    }
+  });
+});
+
+backToDailyBtn?.addEventListener("click", () => {
+  setHidden(matchDetailView, true);
+  setHidden(dailyView, false);
+});
+
+const renderHistoryList = () => {
+  const isFirstInningsUnresolved = !currentMeta.secondInnings && Object.keys(activePredictions).length > 0;
+  const showLiveGame = isFirstInningsUnresolved && currentMeta.matchTitle;
+
+  let html = "";
+
+  // Insert Live Game card at the top if 1st INN is unresolved
+  if (showLiveGame) {
+    html += `
+      <div class="history-card" style="border-color: var(--system-blue);" data-match="live">
+        <div class="hcard-left">
+          <span class="hcard-date" style="color: var(--system-blue);">Live Now</span>
+          <span class="hcard-title">${escapeHtml(currentMeta.matchTitle)}</span>
+        </div>
+        <i class="fa-solid fa-chevron-right hcard-arrow"></i>
+      </div>
+    `;
+  }
+
+  // Parse and sort history by date descending
+  const historyEntries = Object.entries(localHistory).map(([key, data]) => ({ id: key, ...data }));
+  
+  // Custom sort to parse the prepended date DD-MM-YYYY
+  historyEntries.sort((a, b) => {
+    const parseDateStr = (idStr) => {
+      const parts = idStr.split("_")[0].split("-");
+      if (parts.length === 3) {
+        return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
+      }
+      return 0; // fallback
+    };
+    return parseDateStr(b.id) - parseDateStr(a.id);
+  });
+
+  if (historyEntries.length === 0 && !showLiveGame) {
+    html += `<div class="empty-state">No daily updates explicitly finalized yet.</div>`;
+  } else {
+    html += historyEntries.map(h => `
+      <div class="history-card" data-match="${h.id}">
+        <div class="hcard-left">
+          <span class="hcard-date">${escapeHtml(h.id.split("_")[0] || "Past Game")}</span>
+          <span class="hcard-title">${escapeHtml(h.matchTitle || "Match Update")}</span>
+        </div>
+        <i class="fa-solid fa-chevron-right hcard-arrow"></i>
+      </div>
+    `).join("");
+  }
+
+  historyListContainer.innerHTML = html;
+
+  historyListContainer.querySelectorAll(".history-card").forEach(card => {
+    card.addEventListener("click", () => {
+      renderMatchDetails(card.dataset.match);
+    });
+  });
+};
+
+const renderMatchDetails = (matchId) => {
+  let standings = [];
+  
+  if (matchId === "live") {
+    // Show current predictions mapped to a dummy standings object
+    matchDetailTitle.textContent = currentMeta.matchTitle || "Live Game";
+    matchDetailTitle.dataset.matchId = "live";
+    
+    standings = Object.values(activePredictions).map(p => ({
+      name: p.name || "Anonymous",
+      p1Winner: p.predictedWinner,
+      p1Guess: (p.scoreA ?? p.scoreB) || "---",
+      p1Score: "Live",
+      p2Score: "-",
+      penalty: "-",
+      total: "-"
+    }));
+    
+    // Sort live alphabetically normally, but we can stick to points for rank naturally 
+    standings.sort((a, b) => a.name.localeCompare(b.name));
+    
+  } else {
+    // Show detailed historical standings
+    const matchData = localHistory[matchId];
+    if (!matchData) return;
+    
+    matchDetailTitle.textContent = matchData.matchTitle || "Match Details";
+    matchDetailTitle.dataset.matchId = matchId;
+    standings = matchData.finalStandings || [];
+    
+    // Sort the individual match data descending by total points (Rank)
+    standings.sort((a, b) => (b.total || 0) - (a.total || 0));
+  }
+
+  if (standings.length === 0) {
+    matchDetailList.innerHTML = `<tr><td colspan="5" class="empty-state">No data available for this match.</td></tr>`;
+  } else {
+    matchDetailList.innerHTML = standings.map(row => {
+      const p1Str = matchId === "live" 
+         ? `${row.p1Winner ? escapeHtml(row.p1Winner.substring(0, 3).toUpperCase()) : ''} ${row.p1Guess}`
+         : `${row.p1Winner ? escapeHtml(row.p1Winner.substring(0, 3).toUpperCase()) : ''} ${row.p1Guess} <br><span class="dim">${row.p1Score} pts</span>`;
+         
+      const p2Str = matchId === "live" ? "-" : `${row.p2Winner ? escapeHtml(row.p2Winner.substring(0, 3).toUpperCase()) : ''} ${row.p2Guess} <br><span class="dim">${row.p2Score} pts</span>`;
+      
+      const penAmt = Number(row.penalty || 0);
+      const penColor = penAmt < 0 ? "color: var(--system-red);" : "";
+      
+      return `
+        <tr>
+          <td style="font-weight: 600;">${escapeHtml(row.name)}</td>
+          <td style="font-size: 0.9rem;">${matchId === "live" ? p1Str : (row.p1Score > 0 ? p1Str : "-")}</td>
+          <td style="font-size: 0.9rem;">${matchId === "live" ? p2Str : (row.p2Score > 0 ? p2Str : "-")}</td>
+          <td style="font-weight: 700; ${penColor}">${penAmt < 0 ? penAmt : "-"}</td>
+          <td style="text-align: right; font-weight: 800; color: var(--system-green);">${row.total}</td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  setHidden(dailyView, true);
+  setHidden(matchDetailView, false);
+};
 
 // Close modal when clicking outside the container
 leaderboardModal?.addEventListener("click", (e) => {
