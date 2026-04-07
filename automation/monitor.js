@@ -72,7 +72,7 @@ const runMonitor = async () => {
   setupFirebase();
   const db = admin.database();
   const ROOM = "ipl";
-  
+
   // 1. Initial Meta Verification
   let metaSnap = await db.ref(`rooms/${ROOM}/meta`).once("value");
   let meta = metaSnap.val() || {};
@@ -85,14 +85,14 @@ const runMonitor = async () => {
   const schedule = getSchedule();
   // We use current system time or environment variable for testing
   const now = process.env.TEST_DATE ? new Date(process.env.TEST_DATE) : new Date();
-  
+
   // GH Actions UTC runs might bleed into the next day logic, we should offset to IST (+5:30)
   // Let's create an IST Date object
   const istOffset = 5.5 * 60 * 60 * 1000;
   let istTime = new Date(now.getTime() + istOffset);
   // Subtract system timezone offset to get true IST representation independent of system local
   istTime = new Date(istTime.getTime() + (new Date().getTimezoneOffset() * 60 * 1000));
-  
+
   const dd = String(istTime.getDate()).padStart(2, '0');
   const mm = String(istTime.getMonth() + 1).padStart(2, '0');
   const yyyy = istTime.getFullYear();
@@ -104,7 +104,7 @@ const runMonitor = async () => {
     console.log(`No match scheduled for ${todayStr}. Exiting.`);
     process.exit(0);
   }
-  
+
   // Check if we are closer to the 1st match (3:30 PM) or 2nd match (7:30 PM)
   // If only 1 match, it's at index 0. If double header, decide based on time.
   const hours = istTime.getHours();
@@ -124,7 +124,7 @@ const runMonitor = async () => {
     console.log(`Match #${targetMatch.matchNo} was already fully resolved. Exiting.`);
     process.exit(0);
   }
-  
+
   // Wait to find exactly this match ID from API
   let matchId = process.env.TEST_MATCH_ID || null;
   while (!matchId) {
@@ -135,12 +135,12 @@ const runMonitor = async () => {
         const found = res.data.find(m => m.name.toLowerCase().includes(targetMatch.home.toLowerCase()) && m.name.toLowerCase().includes(targetMatch.away.toLowerCase()));
         if (found) matchId = found.id;
       }
-    } catch(err) {
+    } catch (err) {
       console.error("Error finding match:", err.message);
     }
     if (!matchId) {
-      console.log("Match not found yet. Retrying in 15 mins.");
-      await sleep(15 * 60 * 1000);
+      console.log("Match not found yet. Retrying in 5 mins.");
+      await sleep(5 * 60 * 1000);
     }
   }
 
@@ -155,11 +155,11 @@ const runMonitor = async () => {
   let firstInningsResolved = false;
 
   console.log("--- ENTERING MONITOR LOOP ---");
-  
+
   let hasSleptInnings1 = false;
   let hasSleptInnings2 = false;
 
-  while(true) {
+  while (true) {
     // Re-check manual override
     metaSnap = await db.ref(`rooms/${ROOM}/meta`).once("value");
     meta = metaSnap.val() || {};
@@ -171,7 +171,7 @@ const runMonitor = async () => {
     try {
       const info = await fetchApi(`https://api.cricapi.com/v1/match_info?id=${matchId}`);
       if (!info || !info.data) throw new Error("No data inside match_info");
-      
+
       const { tossWinner, tossChoice, matchWinner, score, teamInfo, status } = info.data;
 
       // Handle Rainout / Abandoned BEFORE toss or 1st innings
@@ -200,10 +200,10 @@ const runMonitor = async () => {
         battingTeamAbbr = bObj ? bObj.shortname : "";
 
         console.log(`Toss complete. Batting: ${battingTeamFull} (${battingTeamAbbr})`);
-        
+
         let disableScoreA = false;
         let disableScoreB = false;
-        if (battingTeamAbbr.toLowerCase() === targetMatch.home.toLowerCase()) disableScoreB = true; 
+        if (battingTeamAbbr.toLowerCase() === targetMatch.home.toLowerCase()) disableScoreB = true;
         if (battingTeamAbbr.toLowerCase() === targetMatch.away.toLowerCase()) disableScoreA = true;
 
         await db.ref(`rooms/${ROOM}/meta`).update({
@@ -236,14 +236,14 @@ const runMonitor = async () => {
             console.log("1st Innings complete. Resolving scores...");
             const predSnap = await db.ref(`rooms/${ROOM}/predictions`).once("value");
             const preds = predSnap.val() || {};
-            
+
             for (let pid in preds) {
               const stats = calculateInnings1Points(preds[pid], s1.r, meta);
               preds[pid] = { ...preds[pid], ...stats, points: stats.points };
             }
             await db.ref(`rooms/${ROOM}/innings_history/1st`).set(preds);
             await db.ref(`rooms/${ROOM}/predictions`).remove();
-            
+
             // Flip room meta for 2nd innings
             const disableScoreA = !meta.disableScoreA;
             const disableScoreB = !meta.disableScoreB;
@@ -251,7 +251,7 @@ const runMonitor = async () => {
             firstInningsResolved = true;
             console.log("Room transitioned to 2nd Innings.");
           }
-        } 
+        }
         // 3. SECOND INNINGS PROGRESS
         else if (s2) {
           if (!isSecondInningsLocked && s2.o >= 3.0) {
@@ -263,11 +263,11 @@ const runMonitor = async () => {
           // Match ends on 2nd innings constraints
           if (s2.o >= 20.0 || s2.w >= 10 || (matchWinner && matchWinner !== "No Winner")) {
             console.log(`2nd Innings complete. Winner: ${matchWinner}`);
-            const isChaserWinner = matchWinner.toLowerCase() !== s1.inning.toLowerCase().replace(' inning 1','');
-            
+            const isChaserWinner = matchWinner.toLowerCase() !== s1.inning.toLowerCase().replace(' inning 1', '');
+
             const predSnap = await db.ref(`rooms/${ROOM}/predictions`).once("value");
             const preds = predSnap.val() || {};
-            
+
             // Note: If chaser won, their target metric is the Overs format (s2.o). If defender won, target metric is Score format (s2.r)
             const actualResult = isChaserWinner ? s2.o : s2.r;
             // Get abbreviations
@@ -285,12 +285,12 @@ const runMonitor = async () => {
             // Total Up game
             const h1Snap = await db.ref(`rooms/${ROOM}/innings_history/1st`).once("value");
             const totals = calculateMatchFinals(h1Snap.val() || {}, preds);
-            
+
             await db.ref(`rooms/${ROOM}/history/${todayStr}_${targetMatch.home}v${targetMatch.away}`).set({ matchTitle: targetMatch.titleStr, finalStandings: totals });
 
             // Mark Match as full complete
             await db.ref(`rooms/${ROOM}/monitor_state`).set({ matchNo: targetMatch.matchNo, finished: true });
-            
+
             console.log("Fully Resolved and Archived Match. Exiting process.");
             process.exit(0);
           }
