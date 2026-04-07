@@ -155,6 +155,9 @@ const runMonitor = async () => {
   let firstInningsResolved = false;
 
   console.log("--- ENTERING MONITOR LOOP ---");
+  
+  let hasSleptInnings1 = false;
+  let hasSleptInnings2 = false;
 
   while(true) {
     // Re-check manual override
@@ -294,13 +297,42 @@ const runMonitor = async () => {
         }
       }
 
+      // --- DYNAMIC POLLING SPEED CALCULATION ---
+      let delay = 5 * 60 * 1000; // Default: 5 mins
+
+      if (!isTossConfirmed) {
+        delay = 3 * 60 * 1000; // Pre-toss: 3 mins
+      } else {
+        const s1 = (info.data.score && info.data.score[0]) || null;
+        const s2 = (info.data.score && info.data.score[1]) || null;
+
+        if (!firstInningsResolved && s1) {
+          if (s1.o >= 3.0 && !hasSleptInnings1) {
+            console.log("3.0 Overs reached (Innings 1). Entering 60-minute optimization sleep.");
+            delay = 60 * 60 * 1000;
+            hasSleptInnings1 = true;
+          } else if (s1.o >= 19.0) {
+            console.log("19.0 Overs reached (Innings 1). Increasing polling frequency to 2 mins.");
+            delay = 2 * 60 * 1000;
+          }
+        } else if (firstInningsResolved && s2) {
+          if (s2.o >= 3.0 && !hasSleptInnings2) {
+            console.log("3.0 Overs reached (Innings 2). Entering 60-minute optimization sleep.");
+            delay = 60 * 60 * 1000;
+            hasSleptInnings2 = true;
+          } else if (s2.o >= 19.0) {
+            console.log("19.0 Overs reached (Innings 2). Increasing polling frequency to 2 mins.");
+            delay = 2 * 60 * 1000;
+          }
+        }
+      }
+
+      await sleep(delay);
+
     } catch (err) {
       console.error("Monitor Loop API Error: ", err.message);
+      await sleep(5 * 60 * 1000); // Standard retry delay on error
     }
-    
-    // Polling Speed
-    const delay = !isTossConfirmed ? 3 * 60 * 1000 : 5 * 60 * 1000;
-    await sleep(delay);
   }
 };
 
