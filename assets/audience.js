@@ -549,6 +549,14 @@ chatForm?.addEventListener("submit", async (event) => {
   }
 });
 
+chatMessageInput?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && event.ctrlKey) {
+    event.preventDefault();
+    chatForm?.requestSubmit();
+  }
+});
+
+
 // --- Integrated GIF Picker Logic ---
 
 const setReactionStatus = (text, tone = "default") => setStatus(chatStatus, text, tone);
