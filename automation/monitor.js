@@ -131,10 +131,23 @@ const runMonitor = async () => {
     try {
       console.log("Fetching /currentMatches to find target match...");
       const res = await fetchApi("https://api.cricapi.com/v1/currentMatches?offset=0");
-      if (res && res.data) {
-        const found = res.data.find(m => m.name.toLowerCase().includes(targetMatch.home.toLowerCase()) && m.name.toLowerCase().includes(targetMatch.away.toLowerCase()));
+        const TEAM_MAP = {
+          "CSK": "chennai",
+          "DC": "delhi",
+          "GT": "gujarat",
+          "KKR": "kolkata",
+          "LSG": "lucknow",
+          "MI": "mumbai",
+          "PBKS": "punjab",
+          "RR": "rajasthan",
+          "RCB": "royal challengers",
+          "SRH": "sunrisers"
+        };
+        const homeKey = TEAM_MAP[targetMatch.home] || targetMatch.home.toLowerCase();
+        const awayKey = TEAM_MAP[targetMatch.away] || targetMatch.away.toLowerCase();
+
+        const found = res.data.find(m => m.name.toLowerCase().includes(homeKey) && m.name.toLowerCase().includes(awayKey));
         if (found) matchId = found.id;
-      }
     } catch (err) {
       console.error("Error finding match:", err.message);
     }
