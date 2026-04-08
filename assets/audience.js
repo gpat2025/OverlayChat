@@ -634,9 +634,7 @@ const renderGifs = (gifs) => {
           message: url // Detecting image URLs in renderChat
         });
 
-        // Close picker after sending
-        setHidden(gifPickerContainer, true);
-        toggleGifPickerBtn.classList.remove("active");
+        // Persistence on selection: picker remains open as per user request
         setReactionStatus("GIF Sent!", "neutral");
         setTimeout(() => setReactionStatus("Ready"), 3000);
       } catch (err) {
@@ -649,7 +647,7 @@ const renderGifs = (gifs) => {
 
 const loadTrending = async () => {
   try {
-    const data = await fetchKlipy(`${currentMediaType}/trending`, { limit: 12 });
+    const data = await fetchKlipy(`${currentMediaType}/trending`, { limit: 48 });
     // Robust Klipy nesting check: can be data.data or data.data.data
     const gifs = Array.isArray(data?.data) ? data.data : (data?.data?.data || []);
     renderGifs(gifs);
@@ -668,7 +666,7 @@ const handleGifSearch = async () => {
 
   setReactionStatus("Searching...");
   try {
-    const data = await fetchKlipy(`${currentMediaType}/search`, { q: query, limit: 12 });
+    const data = await fetchKlipy(`${currentMediaType}/search`, { q: query, limit: 48 });
     // Robust Klipy nesting check: can be data.data or data.data.data
     const gifs = Array.isArray(data?.data) ? data.data : (data?.data?.data || []);
     renderGifs(gifs);
@@ -679,12 +677,19 @@ const handleGifSearch = async () => {
   }
 };
 
+let searchTimeout;
 gifSearchInput?.addEventListener("input", (e) => {
-  // Simple debounce logic could be added here, but let's stick to keypress for now to avoid rapid API calls
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    handleGifSearch();
+  }, 400); // 400ms debounce
 });
 
 gifSearchInput?.addEventListener("keypress", (e) => {
-  if (e.key === "Enter") handleGifSearch();
+  if (e.key === "Enter") {
+    clearTimeout(searchTimeout);
+    handleGifSearch();
+  }
 });
 
 // --- Leaderboard Implementation ---

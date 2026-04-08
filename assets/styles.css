@@ -1546,7 +1546,7 @@ body.desktop-embed .join-card {
   display: flex;
   flex-direction: column;
   animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-  max-height: 400px;
+  max-height: 600px;
 }
 
 @keyframes slideUp {
