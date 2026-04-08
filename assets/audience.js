@@ -80,6 +80,8 @@ const modalNavTabs = document.querySelectorAll(".modal-nav-tab");
 
 let localHistory = {};
 let activePredictions = {};
+let liveHist1st = {};
+let liveHist2nd = {};
 
 const KLIPY_API_KEY = "rwGYYILu8ZBT9xFPoSG2jUhq65JqUbryTlm4JXs8dWXxmR5GgGbEn5nrgvNxRCud";
 const KLIPY_BASE_URL = `https://api.klipy.com/api/v1`;
@@ -397,6 +399,20 @@ if (!roomSelected) {
       localHistory = snapshot.val() || {};
       if (!dailyView.classList.contains("hidden")) {
         renderHistoryList();
+      }
+    });
+
+    onValue(roomRef(roomId, "innings_history/1st"), (snapshot) => {
+      liveHist1st = snapshot.val() || {};
+      if (!matchDetailView.classList.contains("hidden") && matchDetailTitle.dataset.matchId === "live") {
+        renderMatchDetails("live");
+      }
+    });
+
+    onValue(roomRef(roomId, "innings_history/2nd"), (snapshot) => {
+      liveHist2nd = snapshot.val() || {};
+      if (!matchDetailView.classList.contains("hidden") && matchDetailTitle.dataset.matchId === "live") {
+        renderMatchDetails("live");
       }
     });
 
@@ -837,18 +853,75 @@ const renderMatchDetails = (matchId) => {
     matchDetailTitle.textContent = currentMeta.matchTitle || "Live Game";
     matchDetailTitle.dataset.matchId = "live";
     
-    standings = Object.values(activePredictions).map(p => ({
-      name: p.name || "Anonymous",
-      p1Winner: p.predictedWinner,
-      p1Guess: (p.scoreA ?? p.scoreB) || "---",
-      p1Score: "Live",
-      p2Score: "-",
-      penalty: "-",
-      total: "-"
-    }));
+    // Aggregation logic:
+    // 1. Get all unique usernames from activePredictions, liveHist1st, and liveHist2nd
+    const allUsers = new Set([
+      ...Object.keys(activePredictions),
+      ...Object.keys(liveHist1st),
+      ...Object.keys(liveHist2nd)
+    ]);
+
+    standings = Array.from(allUsers).map(uid => {
+      const pActive = activePredictions[uid] || {};
+      const p1Resolved = liveHist1st[uid];
+      const p2Resolved = liveHist2nd[uid];
+      const name = pActive.name || p1Resolved?.name || p2Resolved?.name || "Anonymous";
+
+      let p1Winner = "", p1Guess = "", p1Score = "-";
+      let p2Winner = "", p2Guess = "", p2Score = "-";
+      let total = 0;
+
+      // Innings 1 logic
+      if (p1Resolved) {
+        p1Winner = p1Resolved.predictedWinner;
+        p1Guess = (p1Resolved.scoreA ?? p1Resolved.scoreB) || "---";
+        p1Score = p1Resolved.points ?? 0;
+        total += Number(p1Score);
+      } else if (!currentMeta.secondInnings && pActive.predictedWinner) {
+        p1Winner = pActive.predictedWinner;
+        p1Guess = (pActive.scoreA ?? pActive.scoreB) || "---";
+        p1Score = "Live";
+      } else {
+        p1Winner = "";
+        p1Guess = "---";
+        p1Score = "-";
+      }
+
+      // Innings 2 logic
+      if (p2Resolved) {
+        p2Winner = p2Resolved.predictedWinner;
+        p2Guess = (p2Resolved.scoreA ?? p2Resolved.scoreB) || "---";
+        p2Score = p2Resolved.points ?? 0;
+        total += Number(p2Score);
+      } else if (currentMeta.secondInnings && pActive.predictedWinner) {
+        p2Winner = pActive.predictedWinner;
+        p2Guess = (pActive.scoreA ?? pActive.scoreB) || "---";
+        p2Score = "Live";
+      } else {
+        p2Winner = "";
+        p2Guess = "---";
+        p2Score = "-";
+      }
+
+      return {
+        name,
+        p1Winner,
+        p1Guess,
+        p1Score,
+        p2Winner,
+        p2Guess,
+        p2Score,
+        total: total || (p1Score === "Live" || p2Score === "Live" ? "Live" : 0)
+      };
+    });
     
-    // Sort live alphabetically normally, but we can stick to points for rank naturally 
-    standings.sort((a, b) => a.name.localeCompare(b.name));
+    // Sort live by name for consistency, or total points if some are resolved
+    standings.sort((a, b) => {
+      if (typeof a.total === "number" && typeof b.total === "number") {
+        if (b.total !== a.total) return b.total - a.total;
+      }
+      return a.name.localeCompare(b.name);
+    });
     
   } else {
     // Show detailed historical standings
@@ -867,11 +940,23 @@ const renderMatchDetails = (matchId) => {
     matchDetailList.innerHTML = `<tr><td colspan="5" class="empty-state">No data available for this match.</td></tr>`;
   } else {
     matchDetailList.innerHTML = standings.map(row => {
-      const p1Str = matchId === "live" 
-         ? `${row.p1Winner ? escapeHtml(row.p1Winner.substring(0, 3).toUpperCase()) : ''} ${row.p1Guess}`
-         : `${row.p1Winner ? escapeHtml(row.p1Winner.substring(0, 3).toUpperCase()) : ''} ${row.p1Guess} <br><span class="dim">${row.p1Score} pts</span>`;
-         
-      const p2Str = matchId === "live" ? "-" : `${row.p2Winner ? escapeHtml(row.p2Winner.substring(0, 3).toUpperCase()) : ''} ${row.p2Guess} <br><span class="dim">${row.p2Score} pts</span>`;
+      let p1Str = "-";
+      let p2Str = "-";
+
+      if (matchId === "live") {
+        const p1Info = `${row.p1Winner ? escapeHtml(row.p1Winner.substring(0, 3).toUpperCase()) : ''} ${row.p1Guess}`;
+        p1Str = row.p1Score === "Live" 
+           ? p1Info 
+           : (row.p1Score !== "-" ? `${p1Info} <br><span class="dim">${row.p1Score} pts</span>` : "-");
+
+        const p2Info = `${row.p2Winner ? escapeHtml(row.p2Winner.substring(0, 3).toUpperCase()) : ''} ${row.p2Guess}`;
+        p2Str = row.p2Score === "Live"
+           ? p2Info
+           : (row.p2Score !== "-" ? `${p2Info} <br><span class="dim">${row.p2Score} pts</span>` : "-");
+      } else {
+        p1Str = `${row.p1Winner ? escapeHtml(row.p1Winner.substring(0, 3).toUpperCase()) : ''} ${row.p1Guess} <br><span class="dim">${row.p1Score} pts</span>`;
+        p2Str = `${row.p2Winner ? escapeHtml(row.p2Winner.substring(0, 3).toUpperCase()) : ''} ${row.p2Guess} <br><span class="dim">${row.p2Score} pts</span>`;
+      }
       
       const penAmt = Number(row.penalty || 0);
       const penColor = penAmt < 0 ? "color: var(--system-red);" : "";
@@ -879,8 +964,8 @@ const renderMatchDetails = (matchId) => {
       return `
         <tr>
           <td style="font-weight: 600;">${escapeHtml(row.name)}</td>
-          <td style="font-size: 0.9rem;">${matchId === "live" ? p1Str : (row.p1Score > 0 ? p1Str : "-")}</td>
-          <td style="font-size: 0.9rem;">${matchId === "live" ? p2Str : (row.p2Score > 0 ? p2Str : "-")}</td>
+          <td style="font-size: 0.9rem;">${p1Str}</td>
+          <td style="font-size: 0.9rem;">${p2Str}</td>
           <td style="font-weight: 700; ${penColor}">${penAmt < 0 ? penAmt : "-"}</td>
           <td style="text-align: right; font-weight: 800; color: var(--system-green);">${row.total}</td>
         </tr>

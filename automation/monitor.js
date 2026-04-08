@@ -186,6 +186,7 @@ const runMonitor = async () => {
       if (!info || !info.data) throw new Error("No data inside match_info");
 
       const { tossWinner, tossChoice, matchWinner, score, teamInfo, status } = info.data;
+      console.log(`[API Call] Status: ${status}`);
 
       // Handle Rainout / Abandoned BEFORE toss or 1st innings
       if (status.toLowerCase().includes("no result") || status.toLowerCase().includes("abandoned") || matchWinner === "No Winner") {
@@ -219,6 +220,10 @@ const runMonitor = async () => {
         if (battingTeamAbbr.toLowerCase() === targetMatch.home.toLowerCase()) disableScoreB = true;
         if (battingTeamAbbr.toLowerCase() === targetMatch.away.toLowerCase()) disableScoreA = true;
 
+        // Clear live match containers when a new match begins
+        await db.ref(`rooms/${ROOM}/innings_history`).remove();
+        await db.ref(`rooms/${ROOM}/predictions`).remove();
+
         await db.ref(`rooms/${ROOM}/meta`).update({
           matchTitle: targetMatch.titleStr,
           teamA: targetMatch.home,
@@ -235,6 +240,9 @@ const runMonitor = async () => {
         // Evaluate active innings state
         const s1 = score[0];
         const s2 = score[1];
+        
+        const activeS = s2 || s1;
+        console.log(`[Live Score] ${activeS.inning}: ${activeS.r}/${activeS.w} (${activeS.o} Overs)`);
 
         // 2. FIRST INNINGS PROGRESS
         if (!firstInningsResolved) {
