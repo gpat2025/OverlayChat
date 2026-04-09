@@ -111,7 +111,7 @@ const runMonitor = async () => {
   // 7:30 PM = 19
   // 3:30 PM = 15
   let matchIdx = 0;
-  if (todaysMatches.length > 1 && hours >= 18) {
+  if (todaysMatches.length > 1 && hours >= 16) {
     matchIdx = 1; // Picking the evening match
   }
 
@@ -244,6 +244,9 @@ const runMonitor = async () => {
         const activeS = s2 || s1;
         console.log(`[Live Score] ${activeS.inning}: ${activeS.r}/${activeS.w} (${activeS.o} Overs)`);
 
+        // fallback: If the API status says "Innings Break", it's time to resolve even if overs < 20
+        const isInningsBreak = status.toLowerCase().includes("innings break");
+
         // 2. FIRST INNINGS PROGRESS
         if (!firstInningsResolved) {
           if (!isFirstInningsLocked && s1.o >= 3.0) {
@@ -252,9 +255,9 @@ const runMonitor = async () => {
             isFirstInningsLocked = true;
           }
 
-          // Innings 1 Ends when 20 overs are reached, 10 wickets fall, OR the API explicitly spawns the 2nd innings
-          if (s1.o >= 20.0 || s1.w >= 10 || s2) {
-            console.log("1st Innings complete. Resolving scores...");
+          // Innings 1 Ends when 20 overs are reached, 10 wickets fall, OR the API explicitly spawns the 2nd innings OR Innings Break status
+          if (s1.o >= 20.0 || s1.w >= 10 || s2 || isInningsBreak) {
+            console.log("1st Innings complete (or break detected). Resolving scores...");
             const predSnap = await db.ref(`rooms/${ROOM}/predictions`).once("value");
             const preds = predSnap.val() || {};
 
