@@ -55,6 +55,8 @@ const getSchedule = () => {
 
 const fetchApi = async (url) => {
   try {
+    const apiName = url.split("/v1/")[1]?.split("?")[0] || "API";
+    console.log(`[HTTP Request] Fetching ${apiName}...`);
     const response = await axios.get(`${url}&apikey=${getApiKey()}`);
     if (response.data && response.data.status === "failure") throw new Error(`API returned failure: ${response.data.reason}`);
     return response.data;
@@ -171,9 +173,14 @@ const runMonitor = async () => {
         const awayKey = TEAM_MAP[targetMatch.away] || targetMatch.away.toLowerCase();
 
         const found = res.data.find(m => m.name.toLowerCase().includes(homeKey) && m.name.toLowerCase().includes(awayKey));
-        if (found) matchId = found.id;
+        if (found) {
+          matchId = found.id;
+          console.log(`[Match Discovery] Successfully linked to Match ID: ${matchId}`);
+        } else {
+          console.log(`[Match Discovery] Match not found in ${res.data.length} current matches list.`);
+        }
     } catch (err) {
-      console.error("Error finding match:", err.message);
+      console.error("[Match Discovery] Error finding match:", err.message);
     }
     if (!matchId) {
       console.log("Match not found yet. Retrying in 5 mins.");
@@ -229,7 +236,10 @@ const runMonitor = async () => {
       // We only update teamInfo from the detailed API or if the list provides it
       if (info.data.teamInfo) liveTeamInfo = info.data.teamInfo;
 
-      console.log(`[API Call] Status: ${status}`);
+      const scoreStr = score && score.length > 0 
+        ? score.map(s => `${s.inning}: ${s.r}/${s.w} (${s.o} ov)`).join(" | ") 
+        : "No score yet";
+      console.log(`[Poll Update] Status: "${status}" | Score: [${scoreStr}]`);
 
       // Handle Rainout / Abandoned BEFORE toss or 1st innings
       if (status.toLowerCase().includes("no result") || status.toLowerCase().includes("abandoned") || matchWinner === "No Winner") {
@@ -317,10 +327,13 @@ const runMonitor = async () => {
             await db.ref(`rooms/${ROOM}/meta`).update({ secondInnings: true, predictionsPaused: false, disableScoreA, disableScoreB });
             firstInningsResolved = true;
             console.log("Room transitioned to 2nd Innings.");
+          } else {
+            console.log(`[Monitor] 1st Innings in progress. Waiting for resolution triggers...`);
           }
         }
         // 3. SECOND INNINGS PROGRESS
         else if (s2) {
+          console.log(`[Monitor] 2nd Innings in progress.`);
           if (!isSecondInningsLocked && s2.o >= 3.0) {
             console.log("3.0 Overs reached in 2nd Innings! Locking predictions.");
             await db.ref(`rooms/${ROOM}/meta/predictionsPaused`).set(true);
@@ -394,6 +407,7 @@ const runMonitor = async () => {
         }
       }
 
+      console.log(`[Scheduler] Polling cycle complete. Sleeping for ${Math.round(delay / 1000 / 60)} mins...`);
       await sleep(delay);
 
     } catch (err) {
