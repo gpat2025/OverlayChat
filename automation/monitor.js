@@ -118,11 +118,35 @@ const runMonitor = async () => {
   const targetMatch = todaysMatches[matchIdx];
   console.log(`Target Match: #${targetMatch.matchNo} - ${targetMatch.home} vs ${targetMatch.away} (${targetMatch.time})`);
 
-  // Check if we already resolved this match recently
+  // 2. Initial Resolution Check
   const stateCheck = await db.ref(`rooms/${ROOM}/monitor_state`).once('value');
   if (stateCheck.val() && stateCheck.val().matchNo === targetMatch.matchNo && stateCheck.val().finished) {
     console.log(`Match #${targetMatch.matchNo} was already fully resolved. Exiting.`);
     process.exit(0);
+  }
+
+  // --- Double Header Sequence Protection ---
+  if (matchIdx > 0) {
+    const prevMatch = todaysMatches[matchIdx - 1];
+    let isPrevResolved = false;
+    while (!isPrevResolved) {
+      const prevSnap = await db.ref(`rooms/${ROOM}/monitor_state`).once('value');
+      const prevState = prevSnap.val() || {};
+      
+      if (prevState.matchNo === targetMatch.matchNo) {
+        isPrevResolved = true; // Already moved on to this match
+      } else if (prevState.matchNo === prevMatch.matchNo && prevState.finished) {
+        console.log(`Previous match #${prevMatch.matchNo} is fully resolved. Safe to start Match #${targetMatch.matchNo}.`);
+        isPrevResolved = true;
+      } else if (prevState.matchNo && prevState.matchNo !== prevMatch.matchNo) {
+        isPrevResolved = true; // Handling an unrelated match
+      } else if (!prevState.matchNo) {
+        isPrevResolved = true; // Empty state
+      } else {
+        console.log(`Match #${prevMatch.matchNo} is still IN PROGRESS. Waiting 5 mins to avoid data overwrite...`);
+        await sleep(5 * 60 * 1000);
+      }
+    }
   }
 
   // Wait to find exactly this match ID from API
@@ -165,6 +189,7 @@ const runMonitor = async () => {
   let battingTeamAbbr = "";
   let isFirstInningsLocked = false;
   let isSecondInningsLocked = false;
+  let liveTeamInfo = [];
   let firstInningsResolved = false;
 
   console.log("--- ENTERING MONITOR LOOP ---");
@@ -182,10 +207,28 @@ const runMonitor = async () => {
     }
 
     try {
-      const info = await fetchApi(`https://api.cricapi.com/v1/match_info?id=${matchId}`);
-      if (!info || !info.data) throw new Error("No data inside match_info");
+      let info;
+      if (!isTossConfirmed) {
+        info = await fetchApi(`https://api.cricapi.com/v1/match_info?id=${matchId}`);
+      } else {
+        // Use currentMatches as a lightweight score source
+        const list = await fetchApi(`https://api.cricapi.com/v1/currentMatches?offset=0`);
+        const found = list.data && list.data.find(m => m.id === matchId);
+        if (!found) {
+           console.log("Match not found in currentMatches list. Falling back to match_info...");
+           info = await fetchApi(`https://api.cricapi.com/v1/match_info?id=${matchId}`);
+        } else {
+           // Standardize structure to match what we expect from match_info
+           info = { data: found };
+        }
+      }
 
-      const { tossWinner, tossChoice, matchWinner, score, teamInfo, status } = info.data;
+      if (!info || !info.data) throw new Error("No data inside API response");
+
+      const { tossWinner, tossChoice, matchWinner, score, status } = info.data;
+      // We only update teamInfo from the detailed API or if the list provides it
+      if (info.data.teamInfo) liveTeamInfo = info.data.teamInfo;
+
       console.log(`[API Call] Status: ${status}`);
 
       // Handle Rainout / Abandoned BEFORE toss or 1st innings
@@ -207,10 +250,10 @@ const runMonitor = async () => {
       if (!isTossConfirmed && tossWinner && tossChoice) {
         if (tossChoice.toLowerCase() === "bat") battingTeamFull = tossWinner;
         else {
-          const other = teamInfo.find(t => t.name.toLowerCase() !== tossWinner.toLowerCase());
+          const other = liveTeamInfo.find(t => t.name.toLowerCase() !== tossWinner.toLowerCase());
           battingTeamFull = other?.name || "";
         }
-        const bObj = teamInfo.find(t => t.name.toLowerCase() === battingTeamFull.toLowerCase());
+        const bObj = liveTeamInfo.find(t => t.name.toLowerCase() === battingTeamFull.toLowerCase());
         battingTeamAbbr = bObj ? bObj.shortname : "";
 
         console.log(`Toss complete. Batting: ${battingTeamFull} (${battingTeamAbbr})`);
@@ -295,7 +338,7 @@ const runMonitor = async () => {
             // Note: If chaser won, their target metric is the Overs format (s2.o). If defender won, target metric is Score format (s2.r)
             const actualResult = isChaserWinner ? s2.o : s2.r;
             // Get abbreviations
-            const winnerObj = teamInfo.find(t => t.name.toLowerCase() === matchWinner.toLowerCase());
+            const winnerObj = liveTeamInfo.find(t => t.name.toLowerCase() === matchWinner.toLowerCase());
             const winAbbr = winnerObj ? winnerObj.shortname : "---";
 
             for (let pid in preds) {

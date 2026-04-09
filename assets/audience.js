@@ -809,8 +809,8 @@ backToDailyBtn?.addEventListener("click", () => {
 });
 
 const renderHistoryList = () => {
-  const isFirstInningsUnresolved = !currentMeta.secondInnings && Object.keys(activePredictions).length > 0;
-  const showLiveGame = isFirstInningsUnresolved && currentMeta.matchTitle;
+  const isMatchActive = Boolean(currentMeta.matchTitle);
+  const showLiveGame = isMatchActive;
 
   let html = "";
 
