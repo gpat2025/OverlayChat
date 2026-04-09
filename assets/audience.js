@@ -234,6 +234,9 @@ const updateInningsLabels = () => {
     // Requirement: Hide score field if disabled by executive
     const isFinished = Boolean(currentMeta.disableScoreA);
     labelScoreA.parentElement.classList.toggle("hidden", isFinished);
+    // Also disable + clear hidden inputs so residual values don't get sent to Firebase
+    scoreAInput.disabled = isFinished;
+    if (isFinished) scoreAInput.value = "";
 
     labelScoreA.textContent = isOversMode ? `${teamA} Overs` : `${teamA} Score`;
     // If it's the 2nd innings, allow decimals for both fields to be safe
@@ -248,6 +251,9 @@ const updateInningsLabels = () => {
     // Requirement: Hide score field if disabled by executive
     const isFinished = Boolean(currentMeta.disableScoreB);
     labelScoreB.parentElement.classList.toggle("hidden", isFinished);
+    // Also disable + clear hidden inputs so residual values don't get sent to Firebase
+    scoreBInput.disabled = isFinished;
+    if (isFinished) scoreBInput.value = "";
 
     labelScoreB.textContent = isOversMode ? `${teamB} Overs` : `${teamB} Score`;
     // If it's the 2nd innings, allow decimals for both fields to be safe
@@ -879,15 +885,23 @@ const renderMatchDetails = (matchId) => {
       let p2Winner = "", p2Guess = "", p2Score = "-";
       let total = 0;
 
+      // Helper: pick the correct field based on which score is disabled in meta
+      // Falls back to scoreA ?? scoreB when both are active
+      const getActiveScore = (pred, meta) => {
+        if (meta.disableScoreA) return pred.scoreB ?? "---";
+        if (meta.disableScoreB) return pred.scoreA ?? "---";
+        return (pred.scoreA ?? pred.scoreB) ?? "---";
+      };
+
       // Innings 1 logic
       if (p1Resolved) {
         p1Winner = p1Resolved.predictedWinner;
-        p1Guess = (p1Resolved.scoreA ?? p1Resolved.scoreB) || "---";
+        p1Guess = p1Resolved.guess ?? getActiveScore(p1Resolved, currentMeta);
         p1Score = p1Resolved.points ?? 0;
         total += Number(p1Score);
       } else if (!currentMeta.secondInnings && pActive.predictedWinner) {
         p1Winner = pActive.predictedWinner;
-        p1Guess = (pActive.scoreA ?? pActive.scoreB) || "---";
+        p1Guess = getActiveScore(pActive, currentMeta);
         p1Score = "Live";
       } else {
         p1Winner = "";
@@ -898,12 +912,12 @@ const renderMatchDetails = (matchId) => {
       // Innings 2 logic
       if (p2Resolved) {
         p2Winner = p2Resolved.predictedWinner;
-        p2Guess = (p2Resolved.scoreA ?? p2Resolved.scoreB) || "---";
+        p2Guess = p2Resolved.guess ?? getActiveScore(p2Resolved, currentMeta);
         p2Score = p2Resolved.points ?? 0;
         total += Number(p2Score);
       } else if (currentMeta.secondInnings && pActive.predictedWinner) {
         p2Winner = pActive.predictedWinner;
-        p2Guess = (pActive.scoreA ?? pActive.scoreB) || "---";
+        p2Guess = getActiveScore(pActive, currentMeta);
         p2Score = "Live";
       } else {
         p2Winner = "";
