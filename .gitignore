@@ -71,5 +71,5 @@ dist/
 
 # tmp files/folders
 tmp/
-
+scratch/ 
 # assets/firebase-config.js
