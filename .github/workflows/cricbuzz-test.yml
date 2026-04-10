@@ -1,0 +1,40 @@
+name: Cricbuzz Scraper Test (Namibia vs Oman)
+
+on:
+  schedule:
+    # 1:00 PM IST (07:30 UTC) - Daily for testing on this branch
+    - cron: '30 7 * * *'
+
+  workflow_dispatch:
+    # Allows manual triggering from the GitHub Actions UI
+    inputs:
+      test_namibia:
+        description: 'Set to 1 to force Namibia vs Oman match discovery'
+        required: true
+        default: '1'
+
+jobs:
+  test-monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v3
+        with:
+          ref: feature/cricbuzz-monitoring
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Dependencies
+        run: npm i firebase-admin axios dotenv
+
+      - name: Run Cricbuzz Monitor
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_ROOM: test_cricbuzz
+          TEST_NAMIBIA: ${{ github.event.inputs.test_namibia || '1' }}
+        run: node automation/cricbuzz_monitor.js
