@@ -70,6 +70,34 @@ const getSchedule = () => {
   }).filter(Boolean);
 };
 
+// --- LOGIC HELPERS ---
+
+/**
+ * Robustly checks if a candidate team string matches a target team string.
+ * Handles abbreviations, initials, and full names.
+ */
+const isTeamMatch = (candidate, target) => {
+  if (!candidate || !target) return false;
+  const c = candidate.toLowerCase().trim();
+  const t = target.toLowerCase().trim();
+  
+  // 1. Direct or substring match
+  if (c.includes(t) || t.includes(c)) return true;
+  
+  // 2. Initials (e.g., "GT" matches "Gujarat Titans")
+  const initialsOfCandidate = c.split(/\s+/).map(w => w[0]).join("");
+  const initialsOfTarget = t.split(/\s+/).map(w => w[0]).join("");
+  
+  if (initialsOfCandidate === t || initialsOfTarget === c) return true;
+  
+  // 3. First word match (e.g., "Kolkata" matches "Kolkata Knight Riders")
+  const firstWordC = c.split(/\s+/)[0];
+  const firstWordT = t.split(/\s+/)[0];
+  if (firstWordC === firstWordT && firstWordC.length >= 3) return true;
+
+  return false;
+};
+
 // --- SCRAPER LOGIC ---
 
 /**
@@ -356,6 +384,19 @@ const runMonitor = async () => {
   let hasSleptInnings1 = false;
   let hasSleptInnings2 = false;
 
+  // --- RESUME CHECK ---
+  console.log("[Resume] Checking for existing match state in Firebase...");
+  const metaSnap = await db.ref(`rooms/${ROOM}/meta`).once("value");
+  const meta = metaSnap.val();
+  if (meta && isTeamMatch(meta.teamA, targetMatch.home) && isTeamMatch(meta.teamB, targetMatch.away)) {
+      console.log(`[Resume] Found active session for ${targetMatch.home} vs ${targetMatch.away}.`);
+      isTossConfirmed = true;
+      firstInningsResolved = Boolean(meta.secondInnings);
+      isFirstInningsLocked = Boolean(meta.predictionsPaused) && !firstInningsResolved;
+      isSecondInningsLocked = Boolean(meta.predictionsPaused) && firstInningsResolved;
+      console.log(`[Resume] Status: ${firstInningsResolved ? '2nd' : '1st'} Innings | Locked: ${meta.predictionsPaused}`);
+  }
+
   console.log("--- ENTERING MONITOR LOOP ---");
 
   while (true) {
@@ -372,19 +413,24 @@ const runMonitor = async () => {
 
       // 1. TOSS
       if (!isTossConfirmed && tossWinner && tossChoice) {
-        if (tossChoice.toLowerCase() === "bat") battingTeamFull = tossWinner;
-        else {
-          // If they chose to bowl, the other team is batting
-          const lowerWinner = tossWinner.toLowerCase();
-          battingTeamFull = targetMatch.home.toLowerCase().includes(lowerWinner) ? targetMatch.away : targetMatch.home;
+        const isHomeWinner = isTeamMatch(tossWinner, targetMatch.home);
+        
+        if (tossChoice.toLowerCase() === "bat") {
+          battingTeamFull = isHomeWinner ? targetMatch.home : targetMatch.away;
+        } else {
+          // If they chose to bowl (like Rajasthan today), the OTHER team is batting
+          battingTeamFull = isHomeWinner ? targetMatch.away : targetMatch.home;
         }
         
         console.log(`[Toss] ${tossWinner} opted to ${tossChoice}. Batting First: ${battingTeamFull}`);
 
         let disableScoreA = false;
         let disableScoreB = false;
-        if (battingTeamFull.toLowerCase().includes(targetMatch.home.toLowerCase())) disableScoreB = true;
-        else disableScoreA = true;
+        if (isTeamMatch(battingTeamFull, targetMatch.home)) {
+          disableScoreB = true; // Team A batting, hide B
+        } else {
+          disableScoreA = true; // Team B batting, hide A
+        }
 
         await db.ref(`rooms/${ROOM}/innings_history`).remove();
         await db.ref(`rooms/${ROOM}/predictions`).remove();
@@ -425,7 +471,16 @@ const runMonitor = async () => {
             }
             await db.ref(`rooms/${ROOM}/innings_history/1st`).set(preds);
             await db.ref(`rooms/${ROOM}/predictions`).remove();
-            await db.ref(`rooms/${ROOM}/meta`).update({ secondInnings: true, predictionsPaused: false });
+            
+            // Swap score fields for 2nd innings
+            const metaSnap = await db.ref(`rooms/${ROOM}/meta`).once("value");
+            const oldMeta = metaSnap.val() || {};
+            await db.ref(`rooms/${ROOM}/meta`).update({ 
+                secondInnings: true, 
+                predictionsPaused: false,
+                disableScoreA: !oldMeta.disableScoreA,
+                disableScoreB: !oldMeta.disableScoreB
+            });
             firstInningsResolved = true;
           }
         }
