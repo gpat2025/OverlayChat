@@ -415,7 +415,7 @@ const runMonitor = async () => {
           }
 
           const isInningsBreak = status.toLowerCase().includes("innings break") || s2;
-          if (s1.o >= 20.0 || s1.w >= 10 || isInningsBreak) {
+          if (s1.o >= 19.6 || s1.w >= 10 || isInningsBreak) {
             console.log("1st Innings complete. Resolving scores...");
             const predSnap = await db.ref(`rooms/${ROOM}/predictions`).once("value");
             const preds = predSnap.val() || {};
@@ -437,7 +437,7 @@ const runMonitor = async () => {
             isSecondInningsLocked = true;
           }
 
-          if (s2.o >= 20.0 || s2.w >= 10 || matchWinner) {
+          if (s2.o >= 19.6 || s2.w >= 10 || matchWinner) {
             console.log(`Match complete. Winner: ${matchWinner}`);
             const isChaserWinner = matchWinner && !matchWinner.toLowerCase().includes(s1.inning.toLowerCase());
 
