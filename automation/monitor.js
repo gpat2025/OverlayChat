@@ -1,39 +1,44 @@
 require("dotenv").config();
-const axios = require("axios");
+const https = require('https');
 const admin = require("firebase-admin");
 const fs = require("fs");
 const path = require("path");
 const { calculateInnings1Points, calculateInnings2Points, calculateMatchFinals } = require("./scoring.js");
-
-// --- FORCE REAL-TIME LOG OUTPUT (CI/GitHub Actions) ---
-// console.log in non-TTY environments can buffer output. Using process.stdout.write
-// ensures each line is flushed immediately so GitHub Actions shows logs in real-time.
 const util = require("util");
-const _origLog = console.log;
-const _origErr = console.error;
-const _origWarn = console.warn;
+
+// --- FORCE REAL-TIME LOG OUTPUT ---
 console.log = (...args) => { process.stdout.write(util.format(...args) + "\n"); };
 console.error = (...args) => { process.stderr.write(util.format(...args) + "\n"); };
 console.warn = (...args) => { process.stderr.write(util.format(...args) + "\n"); };
 
-// --- API CONFIG ---
-const API_KEYS = [
-  process.env.CRICKET_API_KEY,
-  process.env.CRICKET_API_KEY_BACKUP
-].filter(Boolean);
-let currentKeyIndex = 0;
+// --- HELPERS ---
 
-const getApiKey = () => API_KEYS[currentKeyIndex];
-const rotateKey = () => {
-  if (currentKeyIndex < API_KEYS.length - 1) {
-    currentKeyIndex++;
-    console.log(`Rotated to backup API Key (Index: ${currentKeyIndex})`);
-    return true;
-  }
-  return false;
-};
+const fetchUrl = (url) =>
+  new Promise((resolve, reject) => {
+    // Add cache buster to URL
+    const sep = url.includes('?') ? '&' : '?';
+    const finalUrl = `${url}${sep}t=${Date.now()}`;
+    const options = {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/123.0.0.0 Safari/537.36',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      }
+    };
+    https.get(finalUrl, options, (res) => {
+      // Follow redirects
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return fetchUrl(res.headers.location).then(resolve).catch(reject);
+      }
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        if (res.statusCode !== 200) reject(new Error(`HTTP ${res.statusCode} for ${url}`));
+        else resolve(body);
+      });
+    }).on('error', reject);
+  });
 
-// --- FIREBASE HELPER ---
 const setupFirebase = () => {
   try {
     const defaultVal = process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -53,6 +58,7 @@ const setupFirebase = () => {
 
 const getSchedule = () => {
   const filePath = path.join(__dirname, "..", "schedule_2026_ipl.csv");
+  if (!fs.existsSync(filePath)) return [];
   const data = fs.readFileSync(filePath, "utf8");
   const lines = data.split("\n").map(l => l.trim()).filter(Boolean);
   return lines.slice(1).map(line => {
@@ -64,52 +70,202 @@ const getSchedule = () => {
   }).filter(Boolean);
 };
 
-const fetchApi = async (url) => {
+// --- SCRAPER LOGIC ---
+
+/**
+ * Scrapes Cricbuzz to find a match and its details.
+ * Mimics the structure returned by the old CricAPI for compatibility.
+ */
+const scrapeCricbuzzMatch = async (teamA, teamB, matchPath = null) => {
   try {
-    const apiName = url.split("/v1/")[1]?.split("?")[0] || "API";
-    console.log(`[HTTP Request] Fetching ${apiName}...`);
-    const response = await axios.get(`${url}&apikey=${getApiKey()}`);
-    if (response.data && response.data.status === "failure") throw new Error(`API returned failure: ${response.data.reason}`);
-    return response.data;
+    let path = matchPath;
+
+    // 1. If no path, find it from the live scores page
+    if (!path) {
+      console.log(`[Scraper] Searching for match: ${teamA} vs ${teamB}...`);
+      const liveHtml = await fetchUrl('https://www.cricbuzz.com/cricket-match/live-scores');
+      const matchRegex = /href="(\/live-cricket-scores\/(\d+)\/([^"]+))"/g;
+      const lowerA = teamA.toLowerCase();
+      const lowerB = teamB.toLowerCase();
+      
+      let m;
+      while ((m = matchRegex.exec(liveHtml)) !== null) {
+        if (m[3].includes(lowerA) || m[3].includes(lowerB)) {
+            // Check if BOTH teams are in the slug or description
+            const context = liveHtml.slice(m.index - 500, m.index + 500);
+            if (context.toLowerCase().includes(lowerA) && context.toLowerCase().includes(lowerB)) {
+                path = m[1];
+                break;
+            }
+        }
+      }
+    }
+
+    if (!path) return { status: 'failure', reason: 'Match not found' };
+
+    // 2. Fetch the match page
+    const html = await fetchUrl(`https://www.cricbuzz.com${path}`);
+    
+    // 3. Extract Meta Info (Title and Description)
+    // Use dotAll flag (s) and case-insensitivity to handle newlines and varied casing
+    const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const descMatch = html.match(/<meta\s+name="description"\s+content="([\s\S]*?)"/i);
+    const title = titleMatch ? titleMatch[1].trim() : '';
+    const desc = descMatch ? descMatch[1].trim() : '';
+    
+    // 4. Extract Status
+    let status = 'In Progress';
+    
+    // Specifically strip scripts to avoid matching JSON-LD data as status
+    const bodySearch = html.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '');
+
+    const resultPatterns = [
+        /class="[^"]*cb-text-complete[^"]*"[^>]*>\s*([^<]+)\s*</i,
+        /class="[^"]*cb-text-inprogress[^"]*"[^>]*>\s*([^<]+)\s*</i,
+        /class="[^"]*cb-text-live[^"]*"[^>]*>\s*([^<]+)\s*</i,
+        // Match "opted to bowl/bat" specifically for toss
+        />\s*([^<]*opted to (?:bat|bowl)[^<]*)\s*</i,
+        // Broad fallback last
+        />\s*([^<]*(?:won by|Match tied|Match abandoned|No result)[^<]*)\s*</i
+    ];
+    for (const pat of resultPatterns) {
+        const found = bodySearch.match(pat);
+        if (found && found[1].trim()) {
+            const raw = found[1].trim();
+            if (raw.length < 150) { // Safety check to avoid large blobs
+                status = raw;
+                break;
+            }
+        }
+    }
+    
+    // 5. Extract Toss
+    let tossWinner = null;
+    let tossChoice = null;
+    // Patterns: "X won the toss and opted to bat", "X opt to bowl", "X opt to bat"
+    const tossPatterns = [
+        />\s*([^<.]+)won the toss and opted to (bat|bowl)/i,
+        />\s*([^<.]+)opt to (bat|bowl)/i,
+        />\s*([^<.]+)opted to (bat|bowl)/i
+    ];
+    for (const pat of tossPatterns) {
+        const tm = html.match(pat);
+        if (tm) {
+            tossWinner = tm[1].trim();
+            tossChoice = tm[2].trim();
+            break;
+        }
+    }
+
+    // 6. Extract Scores
+    const scoreList = [];
+    
+    // Strategy A: Mini-scorecard divs (Clean HTML)
+    const cleanHtml = html.replace(/<!--[\s\S]*?-->/g, '').replace(/<span[^>]*>/g, '').replace(/<\/span>/g, '');
+    const scoreDivRegex = />([A-Z]{3,4})\s*<\/div>\s*<div[^>]*>\s*([\d\/]+)\s*\(([\d.]+)\)/g;
+    let sm;
+    while ((sm = scoreDivRegex.exec(cleanHtml)) !== null) {
+        scoreList.push({
+            inning: sm[1],
+            r: parseInt(sm[2].split('/')[0]),
+            w: parseInt(sm[2].split('/')[1] || '0'),
+            o: parseFloat(sm[3])
+        });
+    }
+
+    // Strategy B: Fallback to Meta Description/Title
+    if (scoreList.length === 0) {
+        const metaScoreRegex = /([A-Z]{2,10})\s+([\d\-\/\s]+)\s*\(([\d\.]+)\)/ig;
+        let smMatch;
+        while ((smMatch = metaScoreRegex.exec(desc)) !== null) {
+            const scorePart = smMatch[2].trim();
+            scoreList.push({
+                inning: smMatch[1].toUpperCase(),
+                r: parseInt(scorePart.split(/[\/-]/)[0]),
+                w: parseInt(scorePart.split(/[\/-]/)[1] || '0'),
+                o: parseFloat(smMatch[3])
+            });
+        }
+    }
+
+    // Strategy C: Absolute last resort - search the entire HTML for any score pattern
+    if (scoreList.length === 0) {
+        const broadRegex = /([A-Z]{2,10})\s+([\d\-\/]+)\s*\(([\d.]+)\)/ig;
+        let smMatch;
+        while ((smMatch = broadRegex.exec(html)) !== null) {
+            const team = smMatch[1].toUpperCase();
+            // Skip common words and player names (by checking length and known target teams)
+            if (['FOLLOW', 'COMMENTARY', 'CRICKET', 'MATCH'].includes(team)) continue;
+            
+            scoreList.push({
+                inning: team,
+                r: parseInt(smMatch[2].split(/[\/-]/)[0]),
+                w: parseInt(smMatch[2].split(/[\/-]/)[1] || '0'),
+                o: parseFloat(smMatch[3])
+            });
+        }
+    }
+
+    // Filter scoreList to only include teams relevant to this match (exclude players/excess info)
+    const filteredScores = scoreList.filter(s => {
+        const inn = s.inning.toLowerCase();
+        return inn.includes(teamA.toLowerCase().slice(0, 3)) || 
+               inn.includes(teamB.toLowerCase().slice(0, 3));
+    });
+
+    // 7. Extract Team Info (Abbr and Names)
+    // We try to find codes and full names from the title or description
+    const teams = [];
+    const teamInfoRegex = /([A-Z]{2,4})\s+vs\s+([A-Z]{2,4})/i;
+    const tim = title.match(teamInfoRegex);
+    if (tim) {
+        teams.push({ shortname: tim[1], name: tim[1] }); // Simplified
+        teams.push({ shortname: tim[2], name: tim[2] });
+    }
+
+    // Determine Match Winner
+    let matchWinner = null;
+    if (status.toLowerCase().includes('won by')) {
+        matchWinner = status.split(' won by')[0].trim();
+    }
+
+    return {
+        status: 'success',
+        data: {
+          id: path, // Use path as ID
+          status: status,
+          tossWinner,
+          tossChoice,
+          matchWinner,
+          score: filteredScores,
+          teamInfo: teams,
+          name: title
+        }
+    };
   } catch (err) {
-    const isRateLimit = err.response?.status === 429 || (err.message && err.message.toLowerCase().includes("limit"));
-    if (isRateLimit && rotateKey()) {
-      console.warn(`[Rate Limit] Primary API key exhausted! Switching to backup key and retrying...`);
-      return fetchApi(url);
-    }
-    if (isRateLimit) {
-      console.error(`[Rate Limit] ALL API keys exhausted! Script will retry after the next sleep.`);
-    }
-    throw err;
+    return { status: 'failure', reason: err.message };
   }
 };
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+// --- MONITOR LOOP ---
+
 const runMonitor = async () => {
-  console.log("=== STARTING IPL 2026 LIVE MONITOR ===");
+  console.log("=== STARTING CRICBUZZ SCRAPER MONITOR (Production) ===");
   setupFirebase();
   const db = admin.database();
-  const ROOM = "ipl";
+  const ROOM = process.env.FIREBASE_ROOM || "ipl";
+  
+  console.log(`[Firebase] Target Room: ${ROOM}`);
+  console.log(`[Firebase] Prediction Link: https://overlaychat-6f3c1.web.app/host.html?room=${ROOM}`);
 
-  // 1. Initial Meta Verification
-  let metaSnap = await db.ref(`rooms/${ROOM}/meta`).once("value");
-  let meta = metaSnap.val() || {};
-  if (meta.automationPaused) {
-    console.log("Cloud automation is globally paused by Admin. Exiting cleanly.");
-    process.exit(0);
-  }
-
-  // 2. Discover Today's Schedule
   const schedule = getSchedule();
-  // We use current system time or environment variable for testing
   const now = process.env.TEST_DATE ? new Date(process.env.TEST_DATE) : new Date();
-
-  // GH Actions UTC runs might bleed into the next day logic, we should offset to IST (+5:30)
-  // Let's create an IST Date object
+  
+  // IST Conversion
   const istOffset = 5.5 * 60 * 60 * 1000;
   let istTime = new Date(now.getTime() + istOffset);
-  // Subtract system timezone offset to get true IST representation independent of system local
   istTime = new Date(istTime.getTime() + (new Date().getTimezoneOffset() * 60 * 1000));
 
   const dd = String(istTime.getDate()).padStart(2, '0');
@@ -119,233 +275,74 @@ const runMonitor = async () => {
 
   let todaysMatches = schedule.filter(m => m.date === todayStr);
 
-  if (todaysMatches.length === 0) {
-    console.log(`No match scheduled for ${todayStr}. Exiting.`);
-    process.exit(0);
-  }
-
-  // Check if we are closer to the 1st match (3:30 PM) or 2nd match (7:30 PM)
-  // If only 1 match, it's at index 0. If double header, decide based on time.
   const hours = istTime.getHours();
-  // 7:30 PM = 19
-  // 3:30 PM = 15
-  let matchIdx = 0;
-  if (todaysMatches.length > 1 && hours >= 16) {
-    matchIdx = 1; // Picking the evening match
-  }
-
+  const matchIdx = (todaysMatches.length > 1 && hours >= 16) ? 1 : 0;
   const targetMatch = todaysMatches[matchIdx];
-  console.log(`Target Match: #${targetMatch.matchNo} - ${targetMatch.home} vs ${targetMatch.away} (${targetMatch.time})`);
 
-  // 2. Initial Resolution Check
-  const stateCheck = await db.ref(`rooms/${ROOM}/monitor_state`).once('value');
-  if (stateCheck.val() && stateCheck.val().matchNo === targetMatch.matchNo && stateCheck.val().finished) {
-    console.log(`Match #${targetMatch.matchNo} was already fully resolved. Exiting.`);
+  if (!targetMatch) {
+    console.log(`No match found for today (${todayStr}). Exiting.`);
     process.exit(0);
   }
 
-  // --- Double Header Sequence Protection ---
-  if (matchIdx > 0) {
-    const prevMatch = todaysMatches[matchIdx - 1];
-    let isPrevResolved = false;
-    while (!isPrevResolved) {
-      const prevSnap = await db.ref(`rooms/${ROOM}/monitor_state`).once('value');
-      const prevState = prevSnap.val() || {};
-      
-      if (prevState.matchNo === targetMatch.matchNo) {
-        isPrevResolved = true; // Already moved on to this match
-      } else if (prevState.matchNo === prevMatch.matchNo && prevState.finished) {
-        console.log(`Previous match #${prevMatch.matchNo} is fully resolved. Safe to start Match #${targetMatch.matchNo}.`);
-        isPrevResolved = true;
-      } else if (prevState.matchNo && prevState.matchNo !== prevMatch.matchNo) {
-        isPrevResolved = true; // Handling an unrelated match
-      } else if (!prevState.matchNo) {
-        isPrevResolved = true; // Empty state
-      } else {
-        console.log(`Match #${prevMatch.matchNo} is still IN PROGRESS. Waiting 5 mins to avoid data overwrite...`);
-        await sleep(5 * 60 * 1000);
-      }
-    }
-  }
+  console.log(`Target Match: ${targetMatch.home} vs ${targetMatch.away}`);
 
-  // Wait to find exactly this match ID from API
-  let matchId = process.env.TEST_MATCH_ID || null;
-  while (!matchId) {
+  let matchPath = null;
+  while (!matchPath) {
     try {
-      console.log("Fetching /currentMatches to find target match...");
-      const res = await fetchApi("https://api.cricapi.com/v1/currentMatches?offset=0");
-        const TEAM_MAP = {
-          "CSK": "chennai",
-          "DC": "delhi",
-          "GT": "gujarat",
-          "KKR": "kolkata",
-          "LSG": "lucknow",
-          "MI": "mumbai",
-          "PBKS": "punjab",
-          "RR": "rajasthan",
-          "RCB": "royal challengers",
-          "SRH": "sunrisers"
-        };
-        const homeKey = TEAM_MAP[targetMatch.home] || targetMatch.home.toLowerCase();
-        const awayKey = TEAM_MAP[targetMatch.away] || targetMatch.away.toLowerCase();
-
-        const found = res.data.find(m => m.name.toLowerCase().includes(homeKey) && m.name.toLowerCase().includes(awayKey));
-        if (found) {
-          matchId = found.id;
-          console.log(`[Match Discovery] Successfully linked to Match ID: ${matchId}`);
-        } else {
-          console.log(`[Match Discovery] Match not found in ${res.data.length} current matches list.`);
-        }
+      const res = await scrapeCricbuzzMatch(targetMatch.home, targetMatch.away);
+      if (res.status === 'success') {
+          matchPath = res.data.id;
+          console.log(`[Discovery] Linked to Match: ${res.data.name}`);
+      } else {
+          console.log(`[Discovery] Match not found yet. Retrying in 3 mins.`);
+          await sleep(3 * 60 * 1000);
+      }
     } catch (err) {
-      console.error("[Match Discovery] Error finding match:", err.message);
-    }
-    if (!matchId) {
-      console.log("Match not found yet. Retrying in 5 mins.");
-      await sleep(5 * 60 * 1000);
+      console.error("[Discovery Error]", err.message);
+      await sleep(1 * 60 * 1000);
     }
   }
 
-  console.log(`FOUND Match DB ID: ${matchId}`);
-
-  // PRE-TOSS PHASE
   let isTossConfirmed = false;
   let battingTeamFull = "";
-  let battingTeamAbbr = "";
   let isFirstInningsLocked = false;
   let isSecondInningsLocked = false;
-  let liveTeamInfo = [];
   let firstInningsResolved = false;
-
-  console.log("--- ENTERING MONITOR LOOP ---");
-
   let hasSleptInnings1 = false;
   let hasSleptInnings2 = false;
 
-  // --- STATE RECOVERY (Resume Support) ---
-  // When restarting mid-match (e.g. pushing code fixes), recover state from
-  // Firebase so we don't re-trigger toss setup, data wipes, or 60-min sleeps.
-  console.log("--- CHECKING FOR RESUMABLE STATE ---");
-  const recMeta = (await db.ref(`rooms/${ROOM}/meta`).once("value")).val() || {};
-
-  if (recMeta.matchTitle && recMeta.matchTitle === targetMatch.titleStr) {
-    console.log(`[Resume] Firebase already has match "${recMeta.matchTitle}" initialized. Recovering state...`);
-    isTossConfirmed = true;
-    meta = recMeta;
-
-    const inn1Snap = await db.ref(`rooms/${ROOM}/innings_history/1st`).once("value");
-    if (inn1Snap.val()) {
-      console.log("[Resume] 1st Innings history found in Firebase. Marking as resolved.");
-      firstInningsResolved = true;
-    }
-
-    // Probe current API score to calibrate lock & sleep flags
-    try {
-      const probe = await fetchApi(`https://api.cricapi.com/v1/currentMatches?offset=0`);
-      const mLive = probe.data && probe.data.find(m => m.id === matchId);
-      if (mLive) {
-        if (mLive.teamInfo) liveTeamInfo = mLive.teamInfo;
-
-        if (mLive.score && mLive.score.length > 0) {
-          const s1 = mLive.score[0];
-          const s2 = mLive.score[1];
-
-          if (!firstInningsResolved && s1 && s1.o >= 3.0) {
-            isFirstInningsLocked = true;
-            hasSleptInnings1 = true;
-            console.log(`[Resume] 1st Innings at ${s1.o} ov — prediction lock & sleep flags set.`);
-          }
-          if (firstInningsResolved && s2 && s2.o >= 3.0) {
-            isSecondInningsLocked = true;
-            hasSleptInnings2 = true;
-            console.log(`[Resume] 2nd Innings at ${s2.o} ov — prediction lock & sleep flags set.`);
-          }
-        }
-      }
-    } catch (err) {
-      console.warn(`[Resume] Score probe failed: ${err.message}. Will calibrate on first poll.`);
-    }
-
-    console.log("[Resume] State recovery complete. Entering monitor loop.");
-  } else {
-    console.log("[Fresh Start] No existing match state found. Starting from scratch.");
-  }
+  console.log("--- ENTERING MONITOR LOOP ---");
 
   while (true) {
-    // Re-check manual override
-    metaSnap = await db.ref(`rooms/${ROOM}/meta`).once("value");
-    meta = metaSnap.val() || {};
-    if (meta.automationPaused) {
-      console.log("Automation paused by admin mid-run. Exiting.");
-      process.exit(0);
-    }
-
     try {
-      let info;
-      if (!isTossConfirmed) {
-        info = await fetchApi(`https://api.cricapi.com/v1/match_info?id=${matchId}`);
-      } else {
-        // Use currentMatches as a lightweight score source
-        const list = await fetchApi(`https://api.cricapi.com/v1/currentMatches?offset=0`);
-        const found = list.data && list.data.find(m => m.id === matchId);
-        if (!found) {
-           console.log("Match not found in currentMatches list. Falling back to match_info...");
-           info = await fetchApi(`https://api.cricapi.com/v1/match_info?id=${matchId}`);
-        } else if (!found.score || found.score.length === 0) {
-           console.log("[API Flaky] Match found but score data missing. Falling back to match_info...");
-           info = await fetchApi(`https://api.cricapi.com/v1/match_info?id=${matchId}`);
-        } else {
-           // Standardize structure to match what we expect from match_info
-           info = { data: found };
-        }
-      }
+      const res = await scrapeCricbuzzMatch(targetMatch.home, targetMatch.away, matchPath);
+      if (res.status === 'failure') throw new Error(res.reason);
 
-      if (!info || !info.data) throw new Error("No data inside API response");
-
-      const { tossWinner, tossChoice, matchWinner, score, status } = info.data;
-      // We only update teamInfo from the detailed API or if the list provides it
-      if (info.data.teamInfo) liveTeamInfo = info.data.teamInfo;
+      const { tossWinner, tossChoice, matchWinner, score, status } = res.data;
 
       const scoreStr = score && score.length > 0 
         ? score.map(s => `${s.inning}: ${s.r}/${s.w} (${s.o} ov)`).join(" | ") 
         : "No score yet";
-      console.log(`[Poll Update] Status: "${status}" | Score: [${scoreStr}]`);
+      console.log(`[Poll] Status: "${status}" | Score: [${scoreStr}]`);
 
-      // Handle Rainout / Abandoned BEFORE toss or 1st innings
-      if (status.toLowerCase().includes("no result") || status.toLowerCase().includes("abandoned") || matchWinner === "No Winner") {
-        console.log(`Match Rained Out/Abandoned! Status: ${status}`);
-        if (!firstInningsResolved) {
-          console.log("Scrapping the entire game data. Room cleared.");
-        } else {
-          console.log("Scrapping 2nd Innings. Resolving match with only 1st innings data.");
-          const histSnap = await db.ref(`rooms/${ROOM}/innings_history/1st`).once("value");
-          const totals = calculateMatchFinals(histSnap.val() || {}, {});
-          await db.ref(`rooms/${ROOM}/history/${todayStr}_${targetMatch.home}v${targetMatch.away}`).set({ matchTitle: targetMatch.titleStr, finalStandings: totals, rainedOut2nd: true });
-        }
-        await db.ref(`rooms/${ROOM}/monitor_state`).set({ matchNo: targetMatch.matchNo, finished: true });
-        process.exit(0);
-      }
-
-      // 1. TOSS EXTRACTION
+      // 1. TOSS
       if (!isTossConfirmed && tossWinner && tossChoice) {
         if (tossChoice.toLowerCase() === "bat") battingTeamFull = tossWinner;
         else {
-          const other = liveTeamInfo.find(t => t.name.toLowerCase() !== tossWinner.toLowerCase());
-          battingTeamFull = other?.name || "";
+          // If they chose to bowl, the other team is batting
+          const lowerWinner = tossWinner.toLowerCase();
+          battingTeamFull = targetMatch.home.toLowerCase().includes(lowerWinner) ? targetMatch.away : targetMatch.home;
         }
-        const bObj = liveTeamInfo.find(t => t.name.toLowerCase() === battingTeamFull.toLowerCase());
-        battingTeamAbbr = bObj ? bObj.shortname : "";
-
-        console.log(`Toss complete. Batting: ${battingTeamFull} (${battingTeamAbbr})`);
+        
+        console.log(`[Toss] ${tossWinner} opted to ${tossChoice}. Batting First: ${battingTeamFull}`);
 
         let disableScoreA = false;
         let disableScoreB = false;
-        if (battingTeamAbbr.toLowerCase() === targetMatch.home.toLowerCase()) disableScoreB = true;
-        if (battingTeamAbbr.toLowerCase() === targetMatch.away.toLowerCase()) disableScoreA = true;
+        if (battingTeamFull.toLowerCase().includes(targetMatch.home.toLowerCase())) disableScoreB = true;
+        else disableScoreA = true;
 
-        // Clear live match containers when a new match begins
         await db.ref(`rooms/${ROOM}/innings_history`).remove();
         await db.ref(`rooms/${ROOM}/predictions`).remove();
-
         await db.ref(`rooms/${ROOM}/meta`).update({
           matchTitle: targetMatch.titleStr,
           teamA: targetMatch.home,
@@ -359,132 +356,108 @@ const runMonitor = async () => {
       }
 
       if (isTossConfirmed && score && score.length > 0) {
-        // Evaluate active innings state
         const s1 = score[0];
         const s2 = score[1];
-        
         const activeS = s2 || s1;
-        console.log(`[Live Score] ${activeS.inning}: ${activeS.r}/${activeS.w} (${activeS.o} Overs)`);
+        console.log(`[Live Score] ${activeS.inning}: ${activeS.r}/${activeS.w} (${activeS.o} ov)`);
 
-        // fallback: If the API status says "Innings Break", it's time to resolve even if overs < 20
-        const isInningsBreak = status.toLowerCase().includes("innings break");
-
-        // 2. FIRST INNINGS PROGRESS
+        // 2. FIRST INNINGS
         if (!firstInningsResolved) {
-          if (!isFirstInningsLocked && s1.o >= 3.0) {
+          if (!isFirstInningsLocked && s1 && s1.o >= 3.0) {
             console.log("3.0 Overs reached in 1st Innings! Locking predictions.");
             await db.ref(`rooms/${ROOM}/meta/predictionsPaused`).set(true);
             isFirstInningsLocked = true;
           }
 
-          // Innings 1 Ends when 20 overs are reached, 10 wickets fall, OR the API explicitly spawns the 2nd innings OR Innings Break status
-          if (s1.o >= 20.0 || s1.w >= 10 || s2 || isInningsBreak) {
-            console.log("1st Innings complete (or break detected). Resolving scores...");
+          const isInningsBreak = status.toLowerCase().includes("innings break") || s2;
+          if (s1.o >= 20.0 || s1.w >= 10 || isInningsBreak) {
+            console.log("1st Innings complete. Resolving scores...");
             const predSnap = await db.ref(`rooms/${ROOM}/predictions`).once("value");
             const preds = predSnap.val() || {};
-
             for (let pid in preds) {
-              const stats = calculateInnings1Points(preds[pid], s1.r, meta);
+              const stats = calculateInnings1Points(preds[pid], s1.r, {});
               preds[pid] = { ...preds[pid], ...stats, points: stats.points };
             }
             await db.ref(`rooms/${ROOM}/innings_history/1st`).set(preds);
             await db.ref(`rooms/${ROOM}/predictions`).remove();
-
-            // Flip room meta for 2nd innings
-            const disableScoreA = !meta.disableScoreA;
-            const disableScoreB = !meta.disableScoreB;
-            await db.ref(`rooms/${ROOM}/meta`).update({ secondInnings: true, predictionsPaused: false, disableScoreA, disableScoreB });
+            await db.ref(`rooms/${ROOM}/meta`).update({ secondInnings: true, predictionsPaused: false });
             firstInningsResolved = true;
-            console.log("Room transitioned to 2nd Innings.");
-          } else {
-            console.log(`[Monitor] 1st Innings in progress. Waiting for resolution triggers...`);
           }
         }
-        // 3. SECOND INNINGS PROGRESS
+        // 3. SECOND INNINGS
         else if (s2) {
-          console.log(`[Monitor] 2nd Innings in progress.`);
           if (!isSecondInningsLocked && s2.o >= 3.0) {
             console.log("3.0 Overs reached in 2nd Innings! Locking predictions.");
             await db.ref(`rooms/${ROOM}/meta/predictionsPaused`).set(true);
             isSecondInningsLocked = true;
           }
 
-          // Match ends on 2nd innings constraints
-          if (s2.o >= 20.0 || s2.w >= 10 || (matchWinner && matchWinner !== "No Winner")) {
-            console.log(`2nd Innings complete. Winner: ${matchWinner}`);
-            const isChaserWinner = matchWinner.toLowerCase() !== s1.inning.toLowerCase().replace(' inning 1', '');
+          if (s2.o >= 20.0 || s2.w >= 10 || matchWinner) {
+            console.log(`Match complete. Winner: ${matchWinner}`);
+            const isChaserWinner = matchWinner && !matchWinner.toLowerCase().includes(s1.inning.toLowerCase());
 
             const predSnap = await db.ref(`rooms/${ROOM}/predictions`).once("value");
             const preds = predSnap.val() || {};
-
-            // Note: If chaser won, their target metric is the Overs format (s2.o). If defender won, target metric is Score format (s2.r)
             const actualResult = isChaserWinner ? s2.o : s2.r;
-            // Get abbreviations
-            const winnerObj = liveTeamInfo.find(t => t.name.toLowerCase() === matchWinner.toLowerCase());
-            const winAbbr = winnerObj ? winnerObj.shortname : "---";
 
             for (let pid in preds) {
-              const stats = calculateInnings2Points(preds[pid], winAbbr.toLowerCase(), actualResult, meta, isChaserWinner);
+              const stats = calculateInnings2Points(preds[pid], "---", actualResult, {}, isChaserWinner);
               preds[pid] = { ...preds[pid], ...stats, points: stats.points };
             }
 
             await db.ref(`rooms/${ROOM}/innings_history/2nd`).set(preds);
             await db.ref(`rooms/${ROOM}/predictions`).remove();
-
-            // Total Up game
-            const h1Snap = await db.ref(`rooms/${ROOM}/innings_history/1st`).once("value");
-            const totals = calculateMatchFinals(h1Snap.val() || {}, preds);
-
-            await db.ref(`rooms/${ROOM}/history/${todayStr}_${targetMatch.home}v${targetMatch.away}`).set({ matchTitle: targetMatch.titleStr, finalStandings: totals });
-
-            // Mark Match as full complete
             await db.ref(`rooms/${ROOM}/monitor_state`).set({ matchNo: targetMatch.matchNo, finished: true });
-
-            console.log("Fully Resolved and Archived Match. Exiting process.");
+            console.log("Match fully resolved. Exiting.");
             process.exit(0);
           }
         }
       }
 
-      // --- DYNAMIC POLLING SPEED CALCULATION ---
-      let delay = 5 * 60 * 1000; // Default: 5 mins
-
+      // --- DYNAMIC POLLING ---
+      let delay = 3 * 60 * 1000; // Default 3 mins
+      
       if (!isTossConfirmed) {
-        delay = 3 * 60 * 1000; // Pre-toss: 3 mins
+        delay = 3 * 60 * 1000;
       } else {
-        const s1 = (info.data.score && info.data.score[0]) || null;
-        const s2 = (info.data.score && info.data.score[1]) || null;
-
+        const s1 = score && score[0];
+        const s2 = score && score[1];
+        
         if (!firstInningsResolved && s1) {
-          if (s1.o >= 3.0 && !hasSleptInnings1) {
-            console.log("3.0 Overs reached (Innings 1). Entering 60-minute optimization sleep.");
-            delay = 60 * 60 * 1000;
-            hasSleptInnings1 = true;
-          } else if (s1.o >= 19.0) {
-            console.log("19.0 Overs reached (Innings 1). Increasing polling frequency to 2 mins.");
-            delay = 2 * 60 * 1000;
-          }
-        } else if (firstInningsResolved && s2) {
-          if (s2.o >= 3.0 && !hasSleptInnings2) {
-            console.log("3.0 Overs reached (Innings 2). Entering 60-minute optimization sleep.");
-            delay = 60 * 60 * 1000;
-            hasSleptInnings2 = true;
-          } else if (s2.o >= 19.0) {
-            console.log("19.0 Overs reached (Innings 2). Increasing polling frequency to 2 mins.");
-            delay = 2 * 60 * 1000;
-          }
+           if (s1.o < 0.1 && !hasSleptInnings1) {
+              console.log("[Sleep] Waiting 20 mins for match start...");
+              delay = 20 * 60 * 1000;
+              hasSleptInnings1 = true; 
+           } else if (s1.o >= 3.0 && s1.o < 18.0) {
+              delay = 10 * 60 * 1000;
+           } else if (s1.o >= 18.0) {
+              delay = 1 * 60 * 1000;
+           }
+        } 
+        else if (firstInningsResolved && s2) {
+           if (s2.o < 0.1 && !hasSleptInnings2) {
+              console.log("[Sleep] Waiting 20 mins for 2nd innings start...");
+              delay = 20 * 60 * 1000;
+              hasSleptInnings2 = true;
+           } else if (s2.o >= 3.0 && s2.o < 18.0) {
+              delay = 10 * 60 * 1000;
+           } else if (s2.o >= 18.0) {
+              delay = 1 * 60 * 1000;
+           }
         }
       }
 
-      console.log(`[Scheduler] Polling cycle complete. Sleeping for ${Math.round(delay / 1000 / 60)} mins...`);
+      console.log(`Sleeping for ${Math.round(delay / 1000 / 60)} mins...`);
       await sleep(delay);
 
     } catch (err) {
-      const statusCode = err.response?.status ? ` (HTTP ${err.response.status})` : "";
-      console.error(`[Monitor Error] API call failed${statusCode}: ${err.message}. Retrying in 5 mins.`);
-      await sleep(5 * 60 * 1000);
+      console.error(`[Monitor Error] ${err.message}. Retrying in 3 mins.`);
+      await sleep(3 * 60 * 1000);
     }
   }
 };
 
-runMonitor();
+module.exports = { scrapeCricbuzzMatch };
+if (require.main === module) {
+  runMonitor();
+}

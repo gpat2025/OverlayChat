@@ -32,8 +32,7 @@ jobs:
 
       - name: Run Live Monitor Engine
         env:
-          CRICKET_API_KEY: ${{ secrets.CRICKET_API_KEY }}
-          CRICKET_API_KEY_BACKUP: ${{ secrets.CRICKET_API_KEY_BACKUP }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        # Exits natively natively with code 0 once the match finishes or rains out
+          FIREBASE_ROOM: ipl
+        # Exits natively with code 0 once the match finishes
         run: node automation/monitor.js
