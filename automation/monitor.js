@@ -376,13 +376,18 @@ const runMonitor = async () => {
     const state0 = state0Snap.val();
     const metaSnap0 = await db.ref(`rooms/${ROOM}/meta`).once("value");
     const meta0 = metaSnap0.val();
+    const historySnap0 = await db.ref(`rooms/${ROOM}/history/${todaysMatches[0].matchNo}`).once("value");
 
     const isMatch0Finished = state0 && state0.matchNo === todaysMatches[0].matchNo && state0.finished;
     // Fallback: if the room meta already shows Match 2's teams, Match 1 was manually resolved
     const isRoomOnMatch2 = meta0 && isTeamMatch(meta0.teamA, todaysMatches[1].home);
+    // Most reliable: Match 1's history node already exists in Firebase (written by auto or manual resolve)
+    const isMatch0Archived = historySnap0.exists();
 
-    if (isMatch0Finished || isRoomOnMatch2) {
-      if (isRoomOnMatch2 && !isMatch0Finished) {
+    if (isMatch0Finished || isRoomOnMatch2 || isMatch0Archived) {
+      if (isMatch0Archived && !isMatch0Finished) {
+        console.log(`[Double-Header] Match 1 (${todaysMatches[0].home}) found in history archive. Skipping to Match 2.`);
+      } else if (isRoomOnMatch2 && !isMatch0Finished) {
         console.log(`[Double-Header] Room is already on Match 2 (${todaysMatches[1].home}). Match 1 was manually resolved. Skipping.`);
       } else {
         console.log(`[Double-Header] Match 1 (${todaysMatches[0].home}) is already resolved. Starting from Match 2.`);
