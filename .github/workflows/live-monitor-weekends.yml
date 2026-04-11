@@ -1,0 +1,36 @@
+name: Live Match Automation Bot (Weekends)
+
+on:
+  schedule:
+    # 1:30 PM IST (08:00 UTC) - Weekends
+    - cron: '0 8 * * 0,6'
+
+  # Allow manual triggering from the GitHub Actions UI just in case
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    
+    # Allows the script to stay alive parsing updates for up to 12 hours (720 mins) 
+    # to cover double-header t20 matches safely.
+    timeout-minutes: 720 
+
+    steps:
+      - name: Checkout Repository Configuration
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js Setup
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Cloud Dependencies
+        run: npm i firebase-admin axios dotenv
+
+      - name: Run Live Monitor Engine
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_ROOM: ipl
+        # Exits natively with code 0 once the matches finish
+        run: node automation/monitor.js

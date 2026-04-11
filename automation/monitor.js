@@ -367,67 +367,35 @@ const runMonitor = async () => {
     process.exit(0);
   }
 
-  // --- DOUBLE HEADER LOGIC ---
+  // --- DOUBLE HEADER / RESUME LOGIC ---
+  // Always start from index 0 and let the outer while loop advance to Match 2 organically.
+  // On resume, check Firebase to see if Match 1 is already finished so we can jump to Match 2.
   let targetMatchIdx = 0;
   if (todaysMatches.length > 1) {
-    const hours = istTime.getHours();
-    
-    // Check FB for Match 0 status to see if it's still running
     const state0Snap = await db.ref(`rooms/${ROOM}/monitor_state`).once("value");
     const state0 = state0Snap.val();
-    const metaSnap = await db.ref(`rooms/${ROOM}/meta`).once("value");
-    const meta = metaSnap.val();
-
-    // If meta has Match 0, and it's not marked as finished, we prioritize RESUMING it
-    const isMatch0ActiveInMeta = meta && isTeamMatch(meta.teamA, todaysMatches[0].home);
     const isMatch0Finished = state0 && state0.matchNo === todaysMatches[0].matchNo && state0.finished;
 
-    if (hours < 16) {
-      targetMatchIdx = 0;
+    if (isMatch0Finished) {
+      console.log(`[Double-Header] Match 1 (${todaysMatches[0].home}) is already resolved. Starting from Match 2.`);
+      targetMatchIdx = 1;
     } else {
-      // It's after 4pm (Match 2 window)
-      if (isMatch0ActiveInMeta && !isMatch0Finished) {
-         console.log(`[Double-Header] Match 1 (${todaysMatches[0].home}) is still active in Firebase. Resuming it instead of starting Match 2.`);
-         targetMatchIdx = 0;
-      } else {
-         targetMatchIdx = 1;
-      }
+      console.log(`[Double-Header] Match 1 (${todaysMatches[0].home}) is active or not yet started. Beginning with Match 1.`);
     }
   }
 
-  const targetMatch = todaysMatches[targetMatchIdx];
-
-  // --- SAFETY WAIT ---
-  // If we decided to start Match 2, but Match 1 is still in meta and not finished, we must wait.
-  if (todaysMatches.length > 1 && targetMatchIdx === 1) {
-    console.log(`[Safety] Checking if Match 1 (${todaysMatches[0].home}) needs to clear before starting Match 2...`);
-    while (true) {
-      const metaSnap = await db.ref(`rooms/${ROOM}/meta`).once("value");
-      const meta = metaSnap.val();
-      const stateSnap = await db.ref(`rooms/${ROOM}/monitor_state`).once("value");
-      const state = stateSnap.val();
-
-      if (meta && isTeamMatch(meta.teamA, todaysMatches[0].home)) {
-        const isFinished = state && state.matchNo === todaysMatches[0].matchNo && state.finished;
-        if (!isFinished) {
-          console.log(`[Safety] Waiting for Match 1 (${todaysMatches[0].home} vs ${todaysMatches[0].away}) to finish before starting Match 2 (${targetMatch.home})...`);
-          await sleep(3 * 60 * 1000); // 3 mins
-          continue;
-        }
-      }
-      break; 
-    }
-    console.log(`[Safety] Match 1 resolved. Proceeding with ${targetMatch.home} vs ${targetMatch.away}.`);
-  }
+  let targetMatch = todaysMatches[targetMatchIdx];
 
   if (!targetMatch) {
     console.log(`No match found for today (${todayStr}). Exiting.`);
     process.exit(0);
   }
 
-  console.log(`Target Match: ${targetMatch.home} vs ${targetMatch.away}`);
+  while (targetMatchIdx < todaysMatches.length) {
+    targetMatch = todaysMatches[targetMatchIdx];
+    console.log(`Target Match: ${targetMatch.home} vs ${targetMatch.away}`);
 
-  let matchPath = null;
+    let matchPath = null;
   while (!matchPath) {
     try {
       const res = await scrapeCricbuzzMatch(targetMatch.home, targetMatch.away);
@@ -451,6 +419,7 @@ const runMonitor = async () => {
   let firstInningsResolved = false;
   let hasSleptInnings1 = false;
   let hasSleptInnings2 = false;
+  let predictionsOpenedAt = null; // timestamp (ms) when predictions were opened for this match
 
   // --- RESUME CHECK ---
   console.log("[Resume] Checking for existing match state in Firebase...");
@@ -520,6 +489,7 @@ const runMonitor = async () => {
           predictionsPaused: false
         });
         isTossConfirmed = true;
+        predictionsOpenedAt = Date.now();
       }
 
       if (isTossConfirmed && score && score.length > 0) {
@@ -539,10 +509,14 @@ const runMonitor = async () => {
 
         // 2. FIRST INNINGS
         if (!firstInningsResolved) {
-          if (!isFirstInningsLocked && s1 && s1.o >= 3.0) {
-            console.log("3.0 Overs reached in 1st Innings! Locking predictions.");
+          // Grace period: always give users at least 15 mins from toss before locking
+          const graceElapsed = predictionsOpenedAt ? (Date.now() - predictionsOpenedAt) : Infinity;
+          if (!isFirstInningsLocked && s1 && s1.o >= 3.0 && graceElapsed >= 15 * 60 * 1000) {
+            console.log("3.0 Overs reached in 1st Innings and 15-min grace period elapsed! Locking predictions.");
             await db.ref(`rooms/${ROOM}/meta/predictionsPaused`).set(true);
             isFirstInningsLocked = true;
+          } else if (!isFirstInningsLocked && s1 && s1.o >= 3.0) {
+            console.log(`[Grace] 3.0 Overs reached but grace period active. ${Math.round((15 * 60 * 1000 - graceElapsed) / 1000 / 60)} min(s) remaining.`);
           }
 
           const isInningsBreak = status.toLowerCase().includes("innings break") || s2;
@@ -577,7 +551,11 @@ const runMonitor = async () => {
             isSecondInningsLocked = true;
           }
 
-          if (s2.o >= 19.6 || s2.w >= 10 || matchWinner) {
+          if (s2.o >= 19.6 || s2.w >= 10 || matchWinner || (s1 && s2.r > s1.r)) {
+            // If the chasing team mathematically crossed the target, hard-declare them the winner
+            if (!matchWinner && s1 && s2.r > s1.r) {
+                matchWinner = currentChasingTeam;
+            }
             console.log(`Match complete. Winner: ${matchWinner}`);
             const isChaserWinner = matchWinner && !isTeamMatch(matchWinner, battingTeamFull);
 
@@ -594,10 +572,18 @@ const runMonitor = async () => {
             }
 
             await db.ref(`rooms/${ROOM}/innings_history/2nd`).set(preds);
+            
+            // Native auto-archiving for double-headers to safely clear the board
+            console.log("Aggregating finals and backing up to History...");
+            const h1Snap = await db.ref(`rooms/${ROOM}/innings_history/1st`).once("value");
+            const finalH1 = h1Snap.val() || {};
+            const finals = calculateMatchFinals(finalH1, preds);
+            await db.ref(`rooms/${ROOM}/history/${targetMatch.matchNo}`).set(finals);
+
             await db.ref(`rooms/${ROOM}/predictions`).remove();
             await db.ref(`rooms/${ROOM}/monitor_state`).set({ matchNo: targetMatch.matchNo, finished: true });
-            console.log("Match fully resolved. Exiting.");
-            process.exit(0);
+            console.log("Match fully resolved and successfully archived! Awaiting transition to Match 2.");
+            break;
           }
         }
       }
@@ -644,6 +630,15 @@ const runMonitor = async () => {
       await sleep(3 * 60 * 1000);
     }
   }
+
+  targetMatchIdx++;
+  if (targetMatchIdx < todaysMatches.length) {
+      console.log(`[Double-Header] Match ${targetMatchIdx} complete. Transitioning immediately into Match ${targetMatchIdx + 1}.`);
+  }
+} // outer loop end
+
+  console.log("All matches for today completed successfully. Exiting.");
+  process.exit(0);
 };
 
 module.exports = { scrapeCricbuzzMatch };

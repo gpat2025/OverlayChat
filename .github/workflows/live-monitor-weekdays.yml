@@ -1,12 +1,9 @@
-name: Live Match Automation Bot
+name: Live Match Automation Bot (Weekdays)
 
 on:
   schedule:
-    # 1:30 PM IST (08:00 UTC) - Weekends
-    - cron: '0 8 * * 0,6'
-    
-    # 5:30 PM IST (12:00 UTC) - Every day
-    - cron: '0 12 * * *'
+    # 5:30 PM IST (12:00 UTC) - Weekdays
+    - cron: '0 12 * * 1-5'
 
   # Allow manual triggering from the GitHub Actions UI just in case
   workflow_dispatch:
@@ -15,7 +12,7 @@ jobs:
   monitor:
     runs-on: ubuntu-latest
     
-    # Allows the script to stay alive parsing updates for up to 5 hours (300 mins) to cover an entire T20 match safely
+    # Allows the script to stay alive parsing updates for up to 5 hours (300 mins)
     timeout-minutes: 300 
 
     steps:
