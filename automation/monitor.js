@@ -490,11 +490,17 @@ const runMonitor = async () => {
       if (isTossConfirmed && score && score.length > 0) {
         // Robust mapping: s1 is ALWAYS the team that batted first (battingTeamFull)
         let s1 = score.find(s => isTeamMatch(s.inning, battingTeamFull));
-        // s2 is the other team in the score array (the chasers)
-        let s2 = score.find(s => s !== s1);
+        
+        // s2 is the other team (the chasers)
+        const chasingTeam = isTeamMatch(targetMatch.home, battingTeamFull) ? targetMatch.away : targetMatch.home;
+        let s2 = score.find(s => isTeamMatch(s.inning, chasingTeam));
 
         const activeS = s2 || s1;
-        console.log(`[Live Score] ${activeS.inning}: ${activeS.r}/${activeS.w} (${activeS.o} ov)`);
+        if (s2) {
+          console.log(`[Live Score] Chasing: ${s2.inning} ${s2.r}/${s2.w} (${s2.o} ov) | Target: ${s1 ? s1.r + 1 : '---'}`);
+        } else {
+          console.log(`[Live Score] Batting First: ${s1.inning} ${s1.r}/${s1.w} (${s1.o} ov)`);
+        }
 
         // 2. FIRST INNINGS
         if (!firstInningsResolved) {
@@ -506,24 +512,24 @@ const runMonitor = async () => {
 
           const isInningsBreak = status.toLowerCase().includes("innings break") || s2;
           if (s1.o >= 19.6 || s1.w >= 10 || isInningsBreak) {
-            console.log("1st Innings complete. Resolving scores...");
             const predSnap = await db.ref(`rooms/${ROOM}/predictions`).once("value");
             const preds = predSnap.val() || {};
+            const metaSnap = await db.ref(`rooms/${ROOM}/meta`).once("value");
+            const meta = metaSnap.val() || {};
+
             for (let pid in preds) {
-              const stats = calculateInnings1Points(preds[pid], s1.r, {});
+              const stats = calculateInnings1Points(preds[pid], s1.r, meta);
               preds[pid] = { ...preds[pid], ...stats, points: stats.points };
             }
             await db.ref(`rooms/${ROOM}/innings_history/1st`).set(preds);
             await db.ref(`rooms/${ROOM}/predictions`).remove();
             
             // Swap score fields for 2nd innings
-            const metaSnap = await db.ref(`rooms/${ROOM}/meta`).once("value");
-            const oldMeta = metaSnap.val() || {};
             await db.ref(`rooms/${ROOM}/meta`).update({ 
                 secondInnings: true, 
                 predictionsPaused: false,
-                disableScoreA: !oldMeta.disableScoreA,
-                disableScoreB: !oldMeta.disableScoreB
+                disableScoreA: !meta.disableScoreA,
+                disableScoreB: !meta.disableScoreB
             });
             firstInningsResolved = true;
           }
@@ -538,14 +544,17 @@ const runMonitor = async () => {
 
           if (s2.o >= 19.6 || s2.w >= 10 || matchWinner) {
             console.log(`Match complete. Winner: ${matchWinner}`);
-            const isChaserWinner = matchWinner && !matchWinner.toLowerCase().includes(s1.inning.toLowerCase());
+            const isChaserWinner = matchWinner && !isTeamMatch(matchWinner, battingTeamFull);
+
+            const metaSnap = await db.ref(`rooms/${ROOM}/meta`).once("value");
+            const meta = metaSnap.val() || {};
 
             const predSnap = await db.ref(`rooms/${ROOM}/predictions`).once("value");
             const preds = predSnap.val() || {};
             const actualResult = isChaserWinner ? s2.o : s2.r;
 
             for (let pid in preds) {
-              const stats = calculateInnings2Points(preds[pid], "---", actualResult, {}, isChaserWinner);
+              const stats = calculateInnings2Points(preds[pid], matchWinner, actualResult, meta, isChaserWinner);
               preds[pid] = { ...preds[pid], ...stats, points: stats.points };
             }
 
