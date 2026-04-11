@@ -24,6 +24,7 @@ import {
   stripKlipyUrl,
   sortHistoryLatestFirst
 } from "./shared.js";
+import { renderPlayerProfile } from "./visualize_data.js?v=3";
 
 const roomId = getRoomId();
 const clientId = getClientId();
@@ -745,13 +746,18 @@ const renderLeaderboard = (standings = []) => {
     const badgeClass = isTop3 ? `rank-badge top-${rank}` : 'rank-badge';
     const rowClass = isTop3 ? `top-row rank-${rank}` : '';
 
+    const hasEnoughGames = (player.matchCount || 1) >= 5;
+    const nameEl = hasEnoughGames 
+      ? `<button class="player-name player-name-btn" data-name="${escapeHtml(player.name)}">${escapeHtml(player.name)}</button>`
+      : `<span class="player-name dim-name">${escapeHtml(player.name)}</span>`;
+
     return `
       <tr class="${rowClass}">
         <td style="width: 60px;">
           <div class="${badgeClass}">${rank}</div>
         </td>
         <td class="player-info">
-          <span class="player-name">${escapeHtml(player.name)}</span>
+          ${nameEl}
           <span class="ppg-sublabel">${player.ppg || 0} PTS/GAME</span>
         </td>
         <td style="text-align: center; width: 80px;">
@@ -776,6 +782,14 @@ viewLeaderboardBtn?.addEventListener("click", () => {
 closeLeaderboardBtn?.addEventListener("click", () => {
   leaderboardModal.classList.add("hidden");
   document.body.style.overflow = "";
+});
+
+leaderboardList?.addEventListener("click", (e) => {
+  const btn = e.target.closest(".player-name-btn");
+  console.log("Leaderboard list clicked. Button found?", !!btn);
+  if (!btn) return;
+  console.log("Opening profile for:", btn.dataset.name);
+  renderPlayerProfile(btn.dataset.name, localHistory, localStandings);
 });
 
 // Tab Sorting Listeners
@@ -1084,3 +1098,21 @@ leaderboardModal?.addEventListener("click", (e) => {
 if (roomSelected) {
   // loadTrending(); // Now triggered on picker open to save bandwidth
 }
+
+// Window events for visualizer integration
+window.addEventListener("viewMatchDetails", (e) => {
+  const mid = e.detail;
+  // Open leaderboard modal if not open
+  leaderboardModal.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+  
+  // Switch to match detail view
+  modalNavTabs.forEach(t => t.classList.remove("active"));
+  document.querySelector('.modal-nav-tab[data-view="daily"]')?.classList.add("active");
+  
+  setHidden(seasonView, true);
+  setHidden(dailyView, true);
+  setHidden(matchDetailView, false);
+  
+  renderMatchDetails(mid);
+});

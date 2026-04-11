@@ -1,0 +1,507 @@
+/* visualize_data.css */
+
+.player-name-btn {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+  text-align: left;
+  color: #ffffff !important;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 700 !important;
+  cursor: pointer;
+  text-decoration: none !important;
+  display: inline !important;
+  vertical-align: baseline !important;
+  transition: color 0.2s ease;
+}
+.player-name-btn:hover {
+  text-decoration: underline !important;
+  text-decoration-color: var(--system-blue) !important;
+  color: var(--system-blue) !important;
+}
+
+:root {
+  --system-orange: #FF9500;
+}
+
+.dim-name {
+  opacity: 0.6;
+}
+
+/* Base Modal Overrides / Additions */
+.viz-modal {
+  z-index: 99999 !important; /* Move to very front */
+  display: flex; /* Ensure it's ready to flex when not hidden */
+}
+
+.viz-modal.hidden {
+  display: none !important;
+}
+.viz-modal .dashboard-container {
+  max-width: 800px; /* Slightly wider for charts */
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.viz-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.viz-header h2 {
+  font-size: 1.5rem;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.viz-header .close-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.viz-header .close-btn:hover {
+  color: var(--text-primary);
+}
+
+/* Hero Stat Cards */
+.viz-hero-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.viz-stat-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.viz-stat-val {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.viz-stat-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.viz-stat-val.clickable {
+  color: var(--system-blue);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 0.2s;
+}
+.viz-stat-val.clickable:hover {
+  text-decoration-color: var(--system-blue);
+}
+
+/* Section Containers */
+.viz-section {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 16px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+}
+
+.viz-section h3 {
+  font-size: 1rem;
+  margin: 0 0 16px 0;
+  color: var(--text-secondary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Stacked Bar Chart */
+.viz-bar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 250px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.viz-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+}
+
+.viz-bar-label {
+  min-width: 100px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.viz-bar-track {
+  flex-grow: 1;
+  background: transparent !important;
+  height: 16px;
+  border-radius: 8px;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+.viz-bar-fill-wrapper {
+  display: flex;
+  height: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+}
+
+.viz-bar-p1 {
+  background: var(--system-blue);
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.viz-bar-p2 {
+  background: var(--system-orange);
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+/* The visual penalty subtraction */
+.viz-bar-penalty-overlay {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: rgba(255, 59, 48, 0.45); /* More transparent red as requested */
+  /* We align this to the *end* of the combined p1+p2 physical width via JS inline styles,
+     and stretch it backwards */
+}
+
+.viz-bar-score {
+  width: 90px;
+  text-align: right;
+  color: var(--text-primary);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.viz-badge-pen {
+  background: var(--system-red);
+  color: white;
+  font-size: 0.6rem;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+/* Action Buttons Grid */
+.viz-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: auto;
+}
+
+/* SVG Line Chart Container */
+.viz-svg-container {
+  width: 100%;
+  height: 350px;
+  position: relative;
+  margin-top: 10px;
+  padding: 20px 20px 40px 60px; /* Room for axes */
+  box-sizing: border-box;
+}
+
+.viz-axis-label-y {
+  position: absolute;
+  left: 15px;
+  top: 50%;
+  transform: translateY(-50%) rotate(-90deg);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  opacity: 0.8;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.viz-axis-label-x {
+  position: absolute;
+  bottom: 0px;
+  left: calc(50% + 20px);
+  transform: translateX(-50%);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  opacity: 0.8;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.viz-svg-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.viz-chart-tooltip {
+  position: absolute;
+  background: #1a1a1c;
+  border: 1px solid var(--system-blue);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  color: white;
+  pointer-events: none;
+  transform: translate(-50%, -120%);
+  z-index: 10000;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  transition: top 0.1s, left 0.1s;
+  backdrop-filter: blur(10px);
+}
+
+.viz-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-top: 15px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.legend-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.legend-item.disabled {
+  opacity: 0.3;
+  filter: grayscale(1);
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px currentColor;
+}
+
+/* SVG Interactive Groups */
+.viz-series-group {
+  transition: opacity 0.3s ease;
+}
+
+.viz-svg-svg:has(.viz-series-group:hover) .viz-series-group:not(:hover) {
+  opacity: 0.2;
+}
+
+.viz-series-line {
+  opacity: 0.7;
+  transition: opacity 0.3s ease, stroke-width 0.3s ease;
+}
+
+.viz-series-area {
+  opacity: 0.3;
+  transition: opacity 0.3s ease;
+}
+
+.viz-series-group:hover .viz-series-line {
+  opacity: 1;
+  stroke-width: 4px;
+}
+
+.viz-series-group:hover .viz-series-area {
+  opacity: 0.5;
+}
+
+.chart-point {
+  transition: r 0.2s ease, fill 0.2s ease;
+}
+
+.viz-chart-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.viz-chart-tab {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  padding: 4px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.viz-chart-tab.active {
+  background: var(--system-blue);
+  color: white;
+}
+
+/* Compare Table */
+.viz-compare-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.viz-compare-select {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  outline: none;
+}
+.viz-compare-select option {
+  background: #1a1a1c;
+  color: white;
+}
+
+.viz-compare-table-wrapper {
+  overflow-x: auto;
+}
+
+.viz-compare-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.9rem;
+}
+
+.viz-compare-table th,
+.viz-compare-table td {
+  padding: 12px;
+  text-align: right;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.viz-compare-table th {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.viz-compare-table td.stat-label {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.viz-compare-table td {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.viz-highlight-best {
+  color: var(--system-green);
+  font-weight: 700;
+}
+.viz-highlight-medal {
+  margin-left: 4px;
+}
+
+/* Compare Grouped Bars */
+.viz-compare-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.viz-match-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.viz-match-group-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.viz-cbar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-family: 'JetBrains Mono', monospace;
+}
+.viz-cbar-name {
+  width: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.viz-cbar-track {
+  flex-grow: 1;
+  background: rgba(255, 255, 255, 0.05);
+  height: 10px;
+  border-radius: 5px;
+}
+.viz-cbar-fill {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.3s;
+}
+.viz-cbar-val {
+  width: 40px;
+  text-align: right;
+}

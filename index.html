@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     <link rel="stylesheet" href="./assets/styles.css?v=2" />
     <link rel="stylesheet" href="./assets/ui-overrides.css" />
+    <link rel="stylesheet" href="./assets/visualize_data.css?v=3" />
   </head>
   <body class="app-shell">
     <div class="ambient ambient-left"></div>
@@ -252,6 +253,11 @@
       </div>
     </div>
 
-    <script type="module" src="./assets/audience.js?v=2"></script>
+    <!-- Viz Modals -->
+    <div id="playerProfileModal" class="dashboard-overlay viz-modal hidden"></div>
+    <div id="playerTrendModal" class="dashboard-overlay viz-modal hidden"></div>
+    <div id="compareModal" class="dashboard-overlay viz-modal hidden"></div>
+
+    <script type="module" src="./assets/audience.js?v=3"></script>
   </body>
 </html>
