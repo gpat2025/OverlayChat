@@ -374,10 +374,19 @@ const runMonitor = async () => {
   if (todaysMatches.length > 1) {
     const state0Snap = await db.ref(`rooms/${ROOM}/monitor_state`).once("value");
     const state0 = state0Snap.val();
-    const isMatch0Finished = state0 && state0.matchNo === todaysMatches[0].matchNo && state0.finished;
+    const metaSnap0 = await db.ref(`rooms/${ROOM}/meta`).once("value");
+    const meta0 = metaSnap0.val();
 
-    if (isMatch0Finished) {
-      console.log(`[Double-Header] Match 1 (${todaysMatches[0].home}) is already resolved. Starting from Match 2.`);
+    const isMatch0Finished = state0 && state0.matchNo === todaysMatches[0].matchNo && state0.finished;
+    // Fallback: if the room meta already shows Match 2's teams, Match 1 was manually resolved
+    const isRoomOnMatch2 = meta0 && isTeamMatch(meta0.teamA, todaysMatches[1].home);
+
+    if (isMatch0Finished || isRoomOnMatch2) {
+      if (isRoomOnMatch2 && !isMatch0Finished) {
+        console.log(`[Double-Header] Room is already on Match 2 (${todaysMatches[1].home}). Match 1 was manually resolved. Skipping.`);
+      } else {
+        console.log(`[Double-Header] Match 1 (${todaysMatches[0].home}) is already resolved. Starting from Match 2.`);
+      }
       targetMatchIdx = 1;
     } else {
       console.log(`[Double-Header] Match 1 (${todaysMatches[0].home}) is active or not yet started. Beginning with Match 1.`);
