@@ -944,7 +944,41 @@ const renderMatchDetails = (matchId) => {
           : (p1Score === "Live" || p2Score === "Live" ? "Live" : 0)
       };
     });
-    
+
+    // Dedup by name: if two UIDs resolved to the same display name (e.g. manually restored 1st innings
+    // key differs from the real 2nd innings Firebase UID), merge them into a single row.
+    const nameMap = new Map();
+    for (const row of standings) {
+      const key = (row.name || "Anonymous").trim().toLowerCase();
+      if (!nameMap.has(key)) {
+        nameMap.set(key, { ...row });
+      } else {
+        const existing = nameMap.get(key);
+        // Prefer the row that actually has 1st innings resolved data
+        if (row.p1Score !== "-" && existing.p1Score === "-") {
+          existing.p1Winner = row.p1Winner;
+          existing.p1Guess  = row.p1Guess;
+          existing.p1Score  = row.p1Score;
+        }
+        // Prefer the row that actually has 2nd innings data (resolved or live)
+        if (row.p2Score !== "-" && existing.p2Score === "-") {
+          existing.p2Winner = row.p2Winner;
+          existing.p2Guess  = row.p2Guess;
+          existing.p2Score  = row.p2Score;
+        }
+        // Recalculate penalty and total
+        existing.penalty = (existing.p1Winner && existing.p2Winner &&
+          existing.p1Winner.toLowerCase() !== existing.p2Winner.toLowerCase()) ? -20 : 0;
+        const n1 = typeof existing.p1Score === "number" ? existing.p1Score : 0;
+        const n2 = typeof existing.p2Score === "number" ? existing.p2Score : 0;
+        existing.total = (existing.p1Score === "Live" || existing.p2Score === "Live")
+          ? "Live"
+          : Math.max(0, n1 + n2 + existing.penalty);
+        nameMap.set(key, existing);
+      }
+    }
+    standings = Array.from(nameMap.values());
+
     standings.sort((a, b) => {
       // 1. Live game sorting based on score predictions (Primary)
       if (!currentMeta.secondInnings) {
