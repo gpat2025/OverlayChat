@@ -6,10 +6,16 @@ let _standings = [];
 // Close functionality
 export const closeAllVizModals = () => {
   document.getElementById("playerProfileModal")?.classList.add("hidden");
+  document.getElementById("playerListModal")?.classList.add("hidden");
   document.getElementById("playerTrendModal")?.classList.add("hidden");
   document.getElementById("compareModal")?.classList.add("hidden");
   document.body.style.overflow = "";
 };
+
+// Handle Esc Key
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeAllVizModals();
+});
 
 const setupModalClose = (modal) => {
   modal.addEventListener("click", (e) => {
@@ -152,14 +158,14 @@ export const computePlayerStats = (playerName, history) => {
 
 const VIZ_COLORS = ["#007AFF", "#34C759", "#FF9500", "#FF2D55", "#AF52DE", "#5856D6"];
 
-const renderSvgLineGraph = (container, seriesArray, mode = "cumulative", hiddenNames = new Set()) => {
+const renderSvgLineGraph = (container, seriesArray, mode = "cumulative", hiddenIndices = new Set()) => {
   if (!seriesArray || seriesArray.length === 0) return;
   const W = container.clientWidth || 700;
   const H = container.clientHeight || 250;
   const padTop = 20, padBottom = 20, padSides = 20;
   
   // Filter active series
-  const activeSeries = seriesArray.filter(s => !hiddenNames.has(s.playerName));
+  const activeSeries = seriesArray.filter((s, i) => !hiddenIndices.has(i));
   
   // Prepare processed points for ALL series (to keep axis stable)
   // But we'll only DRAW the active ones
@@ -179,7 +185,7 @@ const renderSvgLineGraph = (container, seriesArray, mode = "cumulative", hiddenN
         detail: mode === "cumulative" ? `Total: ${currentCum}` : `Pts: ${m.total}`
       });
     });
-    return { playerName: s.playerName, color, pts, isActive: !hiddenNames.has(s.playerName), sIdx };
+    return { playerName: s.playerName, color, pts, isActive: !hiddenIndices.has(sIdx), sIdx };
   });
 
   // Global Max across all series (including hidden ones to keep scale stable)
@@ -269,6 +275,84 @@ const renderSvgLineGraph = (container, seriesArray, mode = "cumulative", hiddenN
 };
 
 // ----------------- MODAL RENDERERS ----------------- //
+
+export const renderPlayerListModal = (standings, history) => {
+  const modal = document.getElementById("playerListModal");
+  if (!modal) return;
+
+  // Flatten unique players from standings
+  const playerMap = new Map();
+  standings.forEach(s => {
+    if (!s.name) return;
+    const name = s.name.trim();
+    if (!playerMap.has(name)) {
+      playerMap.set(name, s);
+    }
+  });
+
+  const players = Array.from(playerMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+
+  const renderList = (filter = "") => {
+    const listEl = modal.querySelector("#vizPlayerList");
+    if (!listEl) return;
+
+    const query = filter.toLowerCase().trim();
+    const filtered = players.filter(p => p.name.toLowerCase().includes(query));
+
+    listEl.innerHTML = filtered.map(p => {
+      const matchCount = p.matchCount || 0;
+      return `
+        <div class="viz-player-item" data-name="${escapeHtml(p.name)}">
+          <div>
+            <span class="viz-player-name-main">${escapeHtml(p.name)}</span>
+          </div>
+          <div class="viz-player-meta-small">${matchCount} Matches</div>
+        </div>
+      `;
+    }).join('');
+
+    if (filtered.length === 0) {
+      listEl.innerHTML = `<div class="empty-state">No players found matching "${escapeHtml(filter)}"</div>`;
+    }
+  };
+
+  const html = `
+    <div class="dashboard-container">
+      <header class="viz-header">
+        <h2>👤 Select Player</h2>
+        <button class="close-btn"><i class="fa-solid fa-xmark"></i></button>
+      </header>
+      
+      <div class="viz-search-container">
+        <i class="fa-solid fa-magnifying-glass viz-search-icon"></i>
+        <input type="text" id="vizPlayerSearch" class="viz-search-input" placeholder="Search by name..." autocomplete="off">
+      </div>
+
+      <div id="vizPlayerList" class="viz-player-list">
+        <!-- List injected here -->
+      </div>
+    </div>
+  `;
+  
+  modal.innerHTML = html;
+  setupModalClose(modal);
+  modal.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+
+  renderList();
+
+  const searchInput = modal.querySelector("#vizPlayerSearch");
+  searchInput?.addEventListener("input", (e) => renderList(e.target.value));
+
+  modal.querySelector("#vizPlayerList")?.addEventListener("click", (e) => {
+    const item = e.target.closest(".viz-player-item");
+    if (item) {
+      const name = item.dataset.name;
+      modal.classList.add("hidden");
+      renderPlayerProfile(name, history, standings);
+    }
+  });
+};
 
 export const renderPlayerProfile = (playerName, history, standings) => {
   console.log("renderPlayerProfile entered for:", playerName);
@@ -465,34 +549,37 @@ export const renderCompareTrendsModal = (playerNames, history) => {
   const modal = document.getElementById("playerTrendModal");
   if (!modal) return;
   
-  const hiddenPlayers = new Set();
+  const hiddenIndices = new Set();
   const seriesArray = playerNames.map((name, i) => {
     const stats = computePlayerStats(name, history);
     return {
-      playerName: name,
+      playerName: name.trim(),
       matchData: stats.matchSeries,
-      color: VIZ_COLORS[i % VIZ_COLORS.length]
+      color: VIZ_COLORS[i % VIZ_COLORS.length],
+      idx: i
     };
   });
 
-  const updateView = (mode = "permatch") => {
+  const updateView = () => {
     const ctx = modal.querySelector("#trendChartBox");
-    renderSvgLineGraph(ctx, seriesArray, mode, hiddenPlayers);
+    const activeTab = modal.querySelector(".viz-chart-tab.active");
+    const mode = activeTab?.dataset.mode || "permatch";
+    
+    renderSvgLineGraph(ctx, seriesArray, mode, hiddenIndices);
     
     // Update Legend Visuals
-    const items = modal.querySelectorAll(".legend-item");
-    items.forEach(item => {
-      const name = item.dataset.player;
-      if (hiddenPlayers.has(name)) {
-        item.classList.add("disabled");
+    modal.querySelectorAll(".legend-item").forEach(item => {
+      const idx = parseInt(item.dataset.idx);
+      if (hiddenIndices.has(idx)) {
+        item.classList.add("viz-legend-off");
       } else {
-        item.classList.remove("disabled");
+        item.classList.remove("viz-legend-off");
       }
     });
   };
 
-  const legendHtml = seriesArray.map(s => `
-    <div class="legend-item" data-player="${escapeHtml(s.playerName)}">
+  const legendHtml = seriesArray.map((s, i) => `
+    <div class="legend-item" data-idx="${i}" data-player="${escapeHtml(s.playerName)}">
       <div class="legend-dot" style="background: ${s.color}; color: ${s.color};"></div>
       <span>${escapeHtml(s.playerName)}</span>
     </div>
@@ -531,17 +618,40 @@ export const renderCompareTrendsModal = (playerNames, history) => {
   modal.classList.remove("hidden");
   
   // Initial draw
-  updateView("permatch");
+  updateView();
   
-  // Legend Click events
+  const chartBox = modal.querySelector("#trendChartBox");
+
+  // Legend Listeners
   modal.querySelectorAll(".legend-item").forEach(item => {
-    item.addEventListener("click", () => {
-      const name = item.dataset.player;
-      if (hiddenPlayers.has(name)) hiddenPlayers.delete(name);
-      else hiddenPlayers.add(name);
+    item.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const idxStr = item.getAttribute("data-idx");
+      const idx = parseInt(idxStr);
+      if (isNaN(idx)) return;
       
-      const activeTab = modal.querySelector(".viz-chart-tab.active");
-      updateView(activeTab?.dataset.mode || "permatch");
+      if (hiddenIndices.has(idx)) {
+        hiddenIndices.delete(idx);
+      } else {
+        hiddenIndices.add(idx);
+      }
+      updateView();
+    });
+
+    item.addEventListener("mouseenter", () => {
+      const playerName = item.dataset.player;
+      const group = chartBox.querySelector(`.viz-series-group[data-player="${playerName}"]`);
+      if (group) {
+        chartBox.classList.add("legend-hovering");
+        group.classList.add("legend-highlight");
+      }
+    });
+
+    item.addEventListener("mouseleave", () => {
+      chartBox.classList.remove("legend-hovering");
+      const highlighted = chartBox.querySelectorAll(".legend-highlight");
+      highlighted.forEach(h => h.classList.remove("legend-highlight"));
     });
   });
 
@@ -549,7 +659,7 @@ export const renderCompareTrendsModal = (playerNames, history) => {
   tabs.forEach(t => t.addEventListener("click", (e) => {
     tabs.forEach(btn => btn.classList.remove("active"));
     t.classList.add("active");
-    updateView(t.dataset.mode);
+    updateView();
   }));
 
   modal.querySelector("#btnTrendBackToCompare")?.addEventListener("click", () => {

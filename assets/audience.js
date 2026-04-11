@@ -24,7 +24,7 @@ import {
   stripKlipyUrl,
   sortHistoryLatestFirst
 } from "./shared.js";
-import { renderPlayerProfile } from "./visualize_data.js?v=3";
+import { renderPlayerProfile, renderPlayerListModal } from "./visualize_data.js?v=3";
 
 const roomId = getRoomId();
 const clientId = getClientId();
@@ -64,6 +64,7 @@ const gifGrid = document.querySelector("#gifGrid");
 const reactionStatus = document.querySelector("#reactionStatus"); // Fallback for logs
 
 // Leaderboard UI
+const viewStatsListBtn = document.querySelector("#viewStatsList");
 const viewLeaderboardBtn = document.querySelector("#viewLeaderboard");
 const closeLeaderboardBtn = document.querySelector("#closeLeaderboard");
 const leaderboardModal = document.querySelector("#leaderboardModal");
@@ -777,6 +778,10 @@ const renderLeaderboard = (standings = []) => {
 viewLeaderboardBtn?.addEventListener("click", () => {
   leaderboardModal.classList.remove("hidden");
   document.body.style.overflow = "hidden";
+});
+
+viewStatsListBtn?.addEventListener("click", () => {
+  renderPlayerListModal(localStandings, localHistory);
 });
 
 closeLeaderboardBtn?.addEventListener("click", () => {

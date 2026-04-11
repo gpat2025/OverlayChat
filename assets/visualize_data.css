@@ -44,6 +44,13 @@
 .viz-modal.hidden {
   display: none !important;
 }
+
+.hero-actions {
+  display: flex;
+  gap: 12px;
+  margin-left: auto;
+}
+
 .viz-modal .dashboard-container {
   max-width: 800px; /* Slightly wider for charts */
   padding: 24px;
@@ -151,6 +158,23 @@
   max-height: 250px;
   overflow-y: auto;
   padding-right: 8px;
+}
+
+/* Mobile Optimizations */
+@media screen and (max-height: 800px) {
+  .viz-modal .dashboard-container {
+    gap: 12px;
+    padding: 16px;
+  }
+  .viz-bar-list {
+    max-height: 150px;
+  }
+  .viz-hero-grid {
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  }
+  .viz-stat-val {
+    font-size: 1.2rem;
+  }
 }
 
 .viz-bar-row {
@@ -326,7 +350,7 @@
   background: rgba(255, 255, 255, 0.05);
 }
 
-.legend-item.disabled {
+.legend-item.viz-legend-off {
   opacity: 0.3;
   filter: grayscale(1);
 }
@@ -343,8 +367,14 @@
   transition: opacity 0.3s ease;
 }
 
+/* Hover over SVG line/points */
 .viz-svg-svg:has(.viz-series-group:hover) .viz-series-group:not(:hover) {
-  opacity: 0.2;
+  opacity: 0.15;
+}
+
+/* Hover over Legend item (triggered via JS classes) */
+.viz-svg-container.legend-hovering .viz-series-group:not(.legend-highlight) {
+  opacity: 0.15;
 }
 
 .viz-series-line {
@@ -357,12 +387,15 @@
   transition: opacity 0.3s ease;
 }
 
-.viz-series-group:hover .viz-series-line {
+/* Focus states (either direct hover or legend highlight) */
+.viz-series-group:hover .viz-series-line,
+.viz-series-group.legend-highlight .viz-series-line {
   opacity: 1;
   stroke-width: 4px;
 }
 
-.viz-series-group:hover .viz-series-area {
+.viz-series-group:hover .viz-series-area,
+.viz-series-group.legend-highlight .viz-series-area {
   opacity: 0.5;
 }
 
@@ -457,6 +490,77 @@
 }
 
 /* Compare Grouped Bars */
+
+/* Player List Modal Styles */
+.viz-search-container {
+  margin-bottom: 15px;
+  position: relative;
+}
+
+.viz-search-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 12px 12px 12px 40px;
+  color: #fff;
+  font-family: inherit;
+  font-size: 1rem;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.viz-search-input:focus {
+  border-color: var(--system-blue);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.viz-search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.viz-player-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 5px;
+}
+
+.viz-player-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.viz-player-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateX(4px);
+}
+
+.viz-player-name-main {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.viz-player-meta-small {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+}
 .viz-compare-group-list {
   display: flex;
   flex-direction: column;

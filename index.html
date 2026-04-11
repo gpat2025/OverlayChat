@@ -51,9 +51,14 @@
           <div class="hero-meta">
             <span>Code: <strong id="roomBadge">loading...</strong></span>
             <span id="matchBadge">Waiting for match setup</span>
-            <button id="viewLeaderboard" class="glass-pill-btn">
-              <i class="fa-solid fa-trophy"></i> Leaderboard
-            </button>
+            <div class="hero-actions">
+              <button id="viewStatsList" class="glass-pill-btn">
+                <i class="fa-solid fa-chart-simple"></i> Player Stats
+              </button>
+              <button id="viewLeaderboard" class="glass-pill-btn">
+                <i class="fa-solid fa-trophy"></i> Leaderboard
+              </button>
+            </div>
           </div>
         </section>
 
@@ -255,6 +260,7 @@
 
     <!-- Viz Modals -->
     <div id="playerProfileModal" class="dashboard-overlay viz-modal hidden"></div>
+    <div id="playerListModal" class="dashboard-overlay viz-modal hidden"></div>
     <div id="playerTrendModal" class="dashboard-overlay viz-modal hidden"></div>
     <div id="compareModal" class="dashboard-overlay viz-modal hidden"></div>
 
