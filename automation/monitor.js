@@ -605,8 +605,9 @@ const runMonitor = async () => {
       if (!isTossConfirmed) {
         delay = 3 * 60 * 1000;
       } else {
-        const s1 = score && score[0];
-        const s2 = score && score[1];
+        const currentChasingTeam = isTeamMatch(targetMatch.home, battingTeamFull) ? targetMatch.away : targetMatch.home;
+        const s1 = score && score.find(s => isTeamMatch(s.inning, battingTeamFull));
+        const s2 = score && score.find(s => isTeamMatch(s.inning, currentChasingTeam));
         
         if (!firstInningsResolved && s1) {
            if (s1.o < 0.1 && !hasSleptInnings1) {
