@@ -53,10 +53,20 @@
 
 .viz-modal .dashboard-container {
   max-width: 800px; /* Slightly wider for charts */
+  width: 95%;
+  max-height: 85%;
   padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
+  overflow: hidden; /* We'll scroll inside sections */
+}
+
+@media screen and (max-width: 600px) {
+  .viz-modal .dashboard-container {
+    padding: 16px;
+    gap: 12px;
+  }
 }
 
 .viz-header {
@@ -150,31 +160,22 @@
   align-items: center;
 }
 
+/* Scrollable middle region - encompassing grid and list */
+.viz-scroll-wrapper {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 /* Stacked Bar Chart */
 .viz-bar-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-height: 250px;
-  overflow-y: auto;
-  padding-right: 8px;
-}
-
-/* Mobile Optimizations */
-@media screen and (max-height: 800px) {
-  .viz-modal .dashboard-container {
-    gap: 12px;
-    padding: 16px;
-  }
-  .viz-bar-list {
-    max-height: 150px;
-  }
-  .viz-hero-grid {
-    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-  }
-  .viz-stat-val {
-    font-size: 1.2rem;
-  }
 }
 
 .viz-bar-row {
@@ -469,6 +470,54 @@
 .viz-compare-table th {
   font-weight: 600;
   color: var(--text-muted);
+}
+
+.viz-bar-label {
+  width: 90px;
+  flex-shrink: 0;
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.viz-match-link {
+  cursor: pointer;
+}
+
+.viz-match-link:hover {
+  text-decoration: underline;
+  color: var(--system-blue);
+}
+
+.viz-match-medal {
+  font-size: 0.8rem;
+  margin-left: 2px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.viz-match-medal-spacer {
+  display: inline-block;
+  width: 1.2rem;
+  margin-left: 2px;
+}
+
+.viz-table-player-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.1s;
+}
+
+.viz-table-player-btn:hover {
+  color: var(--system-blue);
+  text-decoration: underline;
 }
 
 .viz-compare-table td.stat-label {

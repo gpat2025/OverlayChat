@@ -30,6 +30,13 @@ const roomId = getRoomId();
 const clientId = getClientId();
 const roomSelected = hasExplicitRoomCode();
 
+// Global State
+let localStandings = [];
+let localHistory = {};
+let seasonSortMode = "total"; // "total", "ppg", "avg"
+let returnToPlayerName = null; // Track source for "Back" button safe navigation
+
+
 const audienceGate = document.querySelector("#audienceGate");
 const audienceApp = document.querySelector("#audienceApp");
 const roomJoinForm = document.querySelector("#roomJoinForm");
@@ -80,7 +87,6 @@ const matchDetailTitle = document.querySelector("#matchDetailTitle");
 const backToDailyBtn = document.querySelector("#backToDailyBtn");
 const modalNavTabs = document.querySelectorAll(".modal-nav-tab");
 
-let localHistory = {};
 let activePredictions = {};
 let liveHist1st = {};
 let liveHist2nd = {};
@@ -725,8 +731,6 @@ gifSearchInput?.addEventListener("keypress", (e) => {
 });
 
 // --- Leaderboard Implementation ---
-let seasonSortMode = "total"; // "total" or "ppg"
-let localStandings = [];
 
 const renderLeaderboard = (standings = []) => {
   localStandings = standings;
@@ -829,6 +833,20 @@ modalNavTabs.forEach(tab => {
 });
 
 backToDailyBtn?.addEventListener("click", () => {
+  if (returnToPlayerName) {
+    const pName = returnToPlayerName;
+    returnToPlayerName = null; // Clear context after use
+    try {
+      if (typeof renderPlayerProfile === "function") {
+        renderPlayerProfile(pName, localHistory, localStandings);
+        return;
+      }
+    } catch (err) {
+      console.error("Failed to return to player profile:", err);
+    }
+  }
+  
+  // Default fallback: return to Daily Updates list
   setHidden(matchDetailView, true);
   setHidden(dailyView, false);
 });
@@ -1077,7 +1095,9 @@ const renderMatchDetails = (matchId) => {
       
       return `
         <tr>
-          <td style="font-weight: 600;">${escapeHtml(row.name)}</td>
+          <td style="font-weight: 600;">
+            <button class="viz-table-player-btn" data-name="${escapeHtml(row.name)}">${escapeHtml(row.name)}</button>
+          </td>
           <td style="font-size: 0.9rem;">${p1Str}</td>
           <td style="font-size: 0.9rem;">${p2Str}</td>
           <td style="font-weight: 700; ${penColor}">${penAmt < 0 ? penAmt : "-"}</td>
@@ -1085,6 +1105,20 @@ const renderMatchDetails = (matchId) => {
         </tr>
       `;
     }).join("");
+    
+    // Wire up player name clicks in the table
+    matchDetailList.querySelectorAll(".viz-table-player-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const playerName = btn.dataset.name;
+        const currentMatchId = matchDetailTitle.dataset.matchId;
+        
+        // Use the navigation return context so 'Back' from profile returns to this match
+        // Note: In our current system, 'Back' from profile usually goes to daily list,
+        // but we can make it smarter.
+        // Actually, renderPlayerProfile just opens a modal.
+        renderPlayerProfile(playerName, localHistory, localStandings);
+      });
+    });
   }
 
   setHidden(dailyView, true);
@@ -1106,10 +1140,17 @@ if (roomSelected) {
 
 // Window events for visualizer integration
 window.addEventListener("viewMatchDetails", (e) => {
-  const mid = e.detail;
+  const data = e.detail;
+  const mid = typeof data === "string" ? data : data.matchId;
+  returnToPlayerName = data.returnTo || null;
+
+  if (!mid) return;
+
   // Open leaderboard modal if not open
-  leaderboardModal.classList.remove("hidden");
-  document.body.style.overflow = "hidden";
+  if (leaderboardModal) {
+    leaderboardModal.classList.remove("hidden");
+    document.body.style.overflow = "hidden";
+  }
   
   // Switch to match detail view
   modalNavTabs.forEach(t => t.classList.remove("active"));
@@ -1119,5 +1160,11 @@ window.addEventListener("viewMatchDetails", (e) => {
   setHidden(dailyView, true);
   setHidden(matchDetailView, false);
   
-  renderMatchDetails(mid);
+  try {
+    renderMatchDetails(mid);
+  } catch (err) {
+    console.error("Error rendering match details:", err);
+    setHidden(dailyView, false); // Fail-safe to list view
+    setHidden(matchDetailView, true);
+  }
 });

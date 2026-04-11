@@ -112,12 +112,12 @@ export const computePlayerStats = (playerName, history) => {
       }
       
       // Medals
-      // Sort the match standings to find rank
       const sortedSt = [...standings].sort((a,b) => b.total - a.total);
       const rankIndex = sortedSt.findIndex(s => (s.name || "").trim().toLowerCase() === nameKey);
-      if (rankIndex === 0) stats.gold++;
-      else if (rankIndex === 1) stats.silver++;
-      else if (rankIndex === 2) stats.bronze++;
+      let matchMedal = null;
+      if (rankIndex === 0) { stats.gold++; matchMedal = "gold"; }
+      else if (rankIndex === 1) { stats.silver++; matchMedal = "silver"; }
+      else if (rankIndex === 2) { stats.bronze++; matchMedal = "bronze"; }
 
       stats.matchSeries.push({
         matchId,
@@ -126,7 +126,8 @@ export const computePlayerStats = (playerName, history) => {
         total: playerRecord.total,
         p1Score: Number(playerRecord.p1Score) || 0,
         p2Score: Number(playerRecord.p2Score) || 0,
-        penalty: playerRecord.penalty || 0
+        penalty: playerRecord.penalty || 0,
+        medal: matchMedal
       });
       
     } else {
@@ -382,9 +383,9 @@ export const renderPlayerProfile = (playerName, history, standings) => {
         if (!m.played) {
           barsHtml += `
             <div class="viz-bar-row">
-              <div class="viz-bar-label">${escapeHtml(m.matchTitle)}</div>
+              <div class="viz-bar-label viz-match-link" data-mid="${m.matchId}">${escapeHtml(m.matchTitle)}</div>
               <div class="viz-bar-track"><span class="viz-stat-label" style="opacity: 0.3;">MISSED</span></div>
-              <div class="viz-bar-score">0</div>
+              <div class="viz-bar-score">0 <span class="viz-match-medal-spacer"></span></div>
             </div>
           `;
           return;
@@ -409,9 +410,15 @@ export const renderPlayerProfile = (playerName, history, standings) => {
           penaltyOverlay = `<div class="viz-bar-penalty-overlay" style="left: calc(${100 - penPct}%); width: ${penPct}%;"></div>`;
         }
 
+        let medalHtml = '';
+        if (m.medal === 'gold') medalHtml = ' <span class="viz-match-medal">🥇</span>';
+        else if (m.medal === 'silver') medalHtml = ' <span class="viz-match-medal">🥈</span>';
+        else if (m.medal === 'bronze') medalHtml = ' <span class="viz-match-medal">🥉</span>';
+        else medalHtml = ' <span class="viz-match-medal-spacer"></span>';
+
         barsHtml += `
           <div class="viz-bar-row">
-            <div class="viz-bar-label">${escapeHtml(m.matchTitle)}</div>
+            <div class="viz-bar-label viz-match-link" data-mid="${m.matchId}">${escapeHtml(m.matchTitle)}</div>
             <div class="viz-bar-track">
               <div class="viz-bar-fill-wrapper" style="width: ${barWidthPct}%;">
                 <div class="viz-bar-p1" style="width: ${p1InternalPct}%;"></div>
@@ -419,7 +426,7 @@ export const renderPlayerProfile = (playerName, history, standings) => {
                 ${penaltyOverlay}
               </div>
             </div>
-            <div class="viz-bar-score">${penaltyBadge} ${m.total}</div>
+            <div class="viz-bar-score">${penaltyBadge} ${m.total}${medalHtml}</div>
           </div>
         `;
       });
@@ -434,23 +441,25 @@ export const renderPlayerProfile = (playerName, history, standings) => {
           <button class="close-btn"><i class="fa-solid fa-xmark"></i></button>
         </header>
         
-        <div class="viz-hero-grid">
-          <div class="viz-stat-card"><span class="viz-stat-val">${stats.totalPoints.toLocaleString()}</span><span class="viz-stat-label">Total Pts</span></div>
-          <div class="viz-stat-card"><span class="viz-stat-val">${stats.ppg}</span><span class="viz-stat-label">PPG</span></div>
-          <div class="viz-stat-card"><span class="viz-stat-val">${stats.gamesParticipated}</span><span class="viz-stat-label">Games</span></div>
-          <div class="viz-stat-card">${bestMatchHtml}<span class="viz-stat-label">Best Match</span></div>
-          <div class="viz-stat-card"><span class="viz-stat-val">${stats.p1Avg}</span><span class="viz-stat-label">1st Avg</span></div>
-          <div class="viz-stat-card"><span class="viz-stat-val">${stats.p2AvgAll}</span><span class="viz-stat-label">2nd Avg (All)</span></div>
-          <div class="viz-stat-card"><span class="viz-stat-val">${stats.p2AvgCorrect}</span><span class="viz-stat-label">2nd Avg (Correct)</span></div>
-          <div class="viz-stat-card"><span class="viz-stat-val">${stats.exactPredictions}</span><span class="viz-stat-label">Exact Preds</span></div>
-          <div class="viz-stat-card"><span class="viz-stat-val">${stats.winPercent}%</span><span class="viz-stat-label">Win Accuracy</span></div>
-          <div class="viz-stat-card"><span class="viz-stat-val">${stats.penalties}</span><span class="viz-stat-label">Penalties</span></div>
-        </div>
-        
-        <div class="viz-section">
-          <h3>Match Breakdowns</h3>
-          <div class="viz-bar-list">
-            ${barsHtml || '<div class="empty-state">No match data.</div>'}
+        <div class="viz-scroll-wrapper">
+          <div class="viz-hero-grid">
+            <div class="viz-stat-card"><span class="viz-stat-val">${stats.totalPoints.toLocaleString()}</span><span class="viz-stat-label">Total Pts</span></div>
+            <div class="viz-stat-card"><span class="viz-stat-val">${stats.ppg}</span><span class="viz-stat-label">PPG</span></div>
+            <div class="viz-stat-card"><span class="viz-stat-val">${stats.gamesParticipated}</span><span class="viz-stat-label">Games</span></div>
+            <div class="viz-stat-card">${bestMatchHtml}<span class="viz-stat-label">Best Match</span></div>
+            <div class="viz-stat-card"><span class="viz-stat-val">${stats.p1Avg}</span><span class="viz-stat-label">1st Avg</span></div>
+            <div class="viz-stat-card"><span class="viz-stat-val">${stats.p2AvgAll}</span><span class="viz-stat-label">2nd Avg (All)</span></div>
+            <div class="viz-stat-card"><span class="viz-stat-val">${stats.p2AvgCorrect}</span><span class="viz-stat-label">2nd Avg (Correct)</span></div>
+            <div class="viz-stat-card"><span class="viz-stat-val">${stats.exactPredictions}</span><span class="viz-stat-label">Exact Preds</span></div>
+            <div class="viz-stat-card"><span class="viz-stat-val">${stats.winPercent}%</span><span class="viz-stat-label">Win Accuracy</span></div>
+            <div class="viz-stat-card"><span class="viz-stat-val">${stats.penalties}</span><span class="viz-stat-label">Penalties</span></div>
+          </div>
+          
+          <div class="viz-section">
+            <h3>Match Breakdowns</h3>
+            <div class="viz-bar-list">
+              ${barsHtml || '<div class="empty-state">No match data.</div>'}
+            </div>
           </div>
         </div>
         
@@ -467,13 +476,28 @@ export const renderPlayerProfile = (playerName, history, standings) => {
     console.log("Modal found?", !!modal, "Classes:", modal.className);
     document.body.style.overflow = "hidden";
     
+    // Wiring Breakdown Match Links
+    modal.querySelectorAll(".viz-match-link").forEach(link => {
+      link.addEventListener("click", (e) => {
+        const mid = e.currentTarget.dataset.mid;
+        if (mid) {
+          closeAllVizModals();
+          window.dispatchEvent(new CustomEvent("viewMatchDetails", { 
+            detail: { matchId: mid, returnTo: playerName } 
+          }));
+        }
+      });
+    });
+
     // Wiring Best Match
     const bestMatchBtn = modal.querySelector(".viz-stat-val.clickable");
     bestMatchBtn?.addEventListener("click", (e) => {
       const mid = e.target.dataset.mid;
       if (mid) {
         closeAllVizModals();
-        window.dispatchEvent(new CustomEvent("viewMatchDetails", { detail: mid }));
+        window.dispatchEvent(new CustomEvent("viewMatchDetails", { 
+          detail: { matchId: mid, returnTo: playerName } 
+        }));
       }
     });
 
