@@ -624,6 +624,7 @@ const runMonitor = async () => {
               }
             };
 
+            await db.ref(`rooms/${ROOM}/history/${dateKey}`).set(archivePayload);
             await db.ref(`rooms/${ROOM}/history/${targetMatch.matchNo}`).set(finals);
             console.log("Match fully resolved and successfully archived!");
 
