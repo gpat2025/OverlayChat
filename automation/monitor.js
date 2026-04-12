@@ -439,6 +439,7 @@ const runMonitor = async () => {
   let hasSleptInnings1 = false;
   let hasSleptInnings2 = false;
   let predictionsOpenedAt = null; // timestamp (ms) when predictions were opened for this match
+  let chasingTeam = ""; 
 
   // --- RESUME CHECK ---
   console.log("[Resume] Checking for existing match state in Firebase...");
@@ -459,6 +460,7 @@ const runMonitor = async () => {
           battingTeamFull = meta.disableScoreB ? meta.teamA : meta.teamB;
       }
       console.log(`[Resume] Identified Batting First: ${battingTeamFull}`);
+      chasingTeam = isTeamMatch(targetMatch.home, battingTeamFull) ? targetMatch.away : targetMatch.home;
   }
 
   console.log("--- ENTERING MONITOR LOOP ---");
@@ -486,7 +488,8 @@ const runMonitor = async () => {
           battingTeamFull = isHomeWinner ? targetMatch.away : targetMatch.home;
         }
         
-        console.log(`[Toss] ${tossWinner} opted to ${tossChoice}. Batting First: ${battingTeamFull}`);
+        chasingTeam = isTeamMatch(targetMatch.home, battingTeamFull) ? targetMatch.away : targetMatch.home;
+        console.log(`[Toss] ${tossWinner} opted to ${tossChoice}. Batting First: ${battingTeamFull} | Chasing: ${chasingTeam}`);
 
         let disableScoreA = false;
         let disableScoreB = false;
@@ -516,7 +519,6 @@ const runMonitor = async () => {
         let s1 = score.find(s => isTeamMatch(s.inning, battingTeamFull));
         
         // s2 is the other team (the chasers)
-        const chasingTeam = isTeamMatch(targetMatch.home, battingTeamFull) ? targetMatch.away : targetMatch.home;
         let s2 = score.find(s => isTeamMatch(s.inning, chasingTeam));
 
         const activeS = s2 || s1;
