@@ -1095,7 +1095,9 @@ const renderMatchDetails = (matchId) => {
       let p2Str = "-";
 
       if (matchId === "live") {
-        const isPreToss = !currentMeta.secondInnings && !currentMeta.disableScoreA && !currentMeta.disableScoreB;
+        const teamA = (currentMeta.teamA || "").toString().trim();
+        const teamB = (currentMeta.teamB || "").toString().trim();
+        const isPreToss = teamA && teamB && !currentMeta.secondInnings && !currentMeta.disableScoreA && !currentMeta.disableScoreB;
         let p1Info = "";
 
         if (isPreToss && row.p1ScoreA !== undefined && row.p1ScoreB !== undefined) {
