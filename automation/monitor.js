@@ -129,6 +129,18 @@ const getSchedule = () => {
 
 // --- LOGIC HELPERS ---
 
+/**
+ * Parses a date (DD-MM-YYYY) and time (H:MM AM/PM) from the schedule into a Date object.
+ */
+function parseScheduleDate(dateStr, timeStr) {
+  const [d, m, y] = dateStr.split('-').map(Number);
+  let [time, modifier] = timeStr.split(' ');
+  let [hours, minutes] = time.split(':').map(Number);
+  if (modifier === 'PM' && hours < 12) hours += 12;
+  if (modifier === 'AM' && hours === 12) hours = 0;
+  return new Date(y, m - 1, d, hours, minutes);
+}
+
 const IPL_TEAM_MAP = {
   "MI": "Mumbai Indians",
   "CSK": "Chennai Super Kings",
@@ -474,13 +486,9 @@ const runMonitor = async () => {
 
   const todaysMatches = schedule.filter(m => m.date === todayStr);
 
-  // --- PRE-LOAD NEXT MATCH (Even if not today) ---
-  // Find the first match in history that hasn't been played yet
+  // Find the first match in the schedule that starts in the future (relative to 'now' IST-converted base)
   console.log("[Setup] Checking for next scheduled match...");
-  const historySnap = await db.ref(`rooms/${ROOM}/history`).once("value");
-  const historyKeys = Object.keys(historySnap.val() || {});
-  
-  const nextScheduledMatch = schedule.find(m => !historyKeys.includes(m.matchNo));
+  const nextScheduledMatch = schedule.find(m => parseScheduleDate(m.date, m.time) > now);
   
   if (nextScheduledMatch) {
     const metaSnap = await db.ref(`rooms/${ROOM}/meta`).once("value");
@@ -1017,10 +1025,9 @@ ${top3Lines}
               if (nextIdx < todaysMatches.length) {
                 nextToLoad = todaysMatches[nextIdx];
               } else {
-                // Find next match tomorrow or later from main schedule
-                const historySnap2 = await db.ref(`rooms/${ROOM}/history`).once("value");
-                const hKeys = Object.keys(historySnap2.val() || {});
-                nextToLoad = schedule.find(m => !hKeys.includes(m.matchNo));
+                // Find next match in the schedule that starts after the current match's time
+                const currentMatchTime = parseScheduleDate(targetMatch.date, targetMatch.time);
+                nextToLoad = schedule.find(m => parseScheduleDate(m.date, m.time) > currentMatchTime);
               }
 
               if (nextToLoad) {
