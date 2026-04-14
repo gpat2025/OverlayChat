@@ -638,9 +638,23 @@ const runMonitor = async () => {
         const s1 = score && score.find(s => isTeamMatch(s.inning, battingTeamFull));
         const s2 = score && score.find(s => isTeamMatch(s.inning, chasingTeam));
 
-        let currentOver = "0.0";
-        if (s2) currentOver = s2.o.toString();
-        else if (s1) currentOver = s1.o.toString();
+        let rawOver = 0;
+        if (s2) rawOver = parseFloat(s2.o || 0);
+        else if (s1) rawOver = parseFloat(s1.o || 0);
+
+        // Normalize overs: treats x.6 as x+1.0 (e.g., 2.6 becomes 3.0)
+        let normalizedOver = rawOver;
+        const overInt = Math.floor(rawOver);
+        const overDec = Math.round((rawOver - overInt) * 10);
+        if (overDec >= 6) {
+          normalizedOver = overInt + 1.0;
+        }
+        const currentOver = normalizedOver.toFixed(1);
+
+        // Specific detection logging for the first 3 overs
+        if (normalizedOver > 0 && normalizedOver <= 1.0) console.log(`[Penalty-Watch] 1st Over detected (${currentOver})`);
+        else if (normalizedOver > 1.0 && normalizedOver <= 2.0) console.log(`[Penalty-Watch] 2nd Over detected (${currentOver})`);
+        else if (normalizedOver > 2.0 && normalizedOver <= 3.0) console.log(`[Penalty-Watch] 3rd Over detected (${currentOver})`);
 
         await db.ref(`rooms/${ROOM}/meta`).update({
           currentOver,
@@ -651,7 +665,7 @@ const runMonitor = async () => {
         const scoreStr = score && score.length > 0
           ? score.map(s => `${s.inning}: ${s.r}/${s.w} (${s.o} ov)`).join(" | ")
           : "No score yet";
-        console.log(`[Poll] Status: "${status}" | Over: ${currentOver} | Break: ${isInningsBreak} | Score: [${scoreStr}]`);
+        console.log(`[Poll] Status: "${status}" | Over: ${currentOver} (raw: ${rawOver}) | Break: ${isInningsBreak} | Score: [${scoreStr}]`);
 
         // 1. TOSS
         if (!isTossConfirmed && tossWinner && tossChoice) {

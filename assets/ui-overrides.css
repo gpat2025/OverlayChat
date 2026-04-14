@@ -128,3 +128,31 @@
   height: 20px;
   margin: 0 6px;
 }
+/* Name Field Utility */
+.name-field-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 2px;
+}
+.name-field-header label {
+  margin-bottom: 0 !important;
+}
+.ghost-link-xs {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--system-blue);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+.ghost-link-xs:hover {
+  opacity: 1;
+}
+.ghost-link-xs.hidden {
+  display: none;
+}

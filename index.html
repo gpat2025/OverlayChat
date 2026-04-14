@@ -78,10 +78,11 @@
             </div>
 
             <form id="predictionForm" class="stack-form">
-              <label>
-                Your name
-                <input id="viewerName" name="viewerName" maxlength="30" required />
-              </label>
+              <div class="name-field-header">
+                <label for="viewerName">Your name</label>
+                <button type="button" id="restoreSessionBtn" class="ghost-link-xs hidden">Already predicted? Restore session</button>
+              </div>
+              <input id="viewerName" name="viewerName" maxlength="30" required />
 
               <label>
                 Predicted winner

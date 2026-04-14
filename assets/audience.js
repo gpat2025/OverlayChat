@@ -59,6 +59,7 @@ const chatFeed = document.querySelector("#chatFeed");
 const predictionStatus = document.querySelector("#predictionStatus");
 const chatStatus = document.querySelector("#chatStatus");
 const predictionSubmitButton = predictionForm?.querySelector("button[type='submit']");
+const restoreSessionBtn = document.querySelector("#restoreSessionBtn");
 
 const activeDiscovery = document.querySelector("#activeDiscovery");
 const activeSessionsList = document.querySelector("#activeSessionsList");
@@ -98,7 +99,6 @@ const KLIPY_BASE_URL = `https://api.klipy.com/api/v1`;
 
 let predictionLocked = false;
 let predictionsPaused = false;
-let allowReprediction = false;
 let currentMeta = {};
 let chasingTeam = null;
 let isEditingReprediction = false;
@@ -133,17 +133,10 @@ const syncPredictionAccess = (meta = {}) => {
     return;
   }
 
-  if (predictionLocked && !allowReprediction) {
+  if (predictionLocked && !isEditingReprediction) {
     setPredictionInputsDisabled(true, meta);
     predictionSubmitButton.textContent = "Prediction locked";
     setStatus(predictionStatus, "Prediction locked", "neutral");
-    return;
-  }
-
-  // If locked but allowed to repredict, fields remain disabled until user clicks Update
-  if (predictionLocked && allowReprediction && !isEditingReprediction) {
-    setPredictionInputsDisabled(true, meta);
-    predictionSubmitButton.textContent = "Update prediction";
     return;
   }
 
@@ -194,7 +187,7 @@ const renderWinnerOptions = (meta = {}) => {
   }
 
   predictionsPaused = Boolean(meta.predictionsPaused);
-  allowReprediction = Boolean(meta.allowReprediction);
+  isEditingReprediction = Boolean(meta.isEditingReprediction);
 
   if (meta.matchTitle) {
     matchBadge.textContent = meta.matchTitle;
@@ -414,18 +407,52 @@ if (!roomSelected) {
       predictionLocked = Boolean(prediction);
 
       if (prediction) {
-        viewerNameInput.value = prediction.name || viewerNameInput.value;
+        setPredictionInputsDisabled(true, currentMeta);
+        viewerNameInput.value = prediction.name || "";
         scoreAInput.value = (prediction.scoreA !== undefined && prediction.scoreA !== null) ? prediction.scoreA : "";
         scoreBInput.value = (prediction.scoreB !== undefined && prediction.scoreB !== null) ? prediction.scoreB : "";
         predictedWinnerInput.value = prediction.predictedWinner || "";
         existingWinner = prediction.predictedWinner || "";
         existingPenalty = prediction.penalty || 0;
+        setHidden(restoreSessionBtn, true);
       } else {
         existingWinner = "";
         existingPenalty = 0;
       }
+      syncPredictionAccess(currentMeta);
+    });
 
-      // We don't have meta yet here usually, but syncPredictionAccess will be called by meta listener
+    // --- Restore Session Logic ---
+    viewerNameInput.addEventListener("input", () => {
+      const nameVal = viewerNameInput.value.trim().toLowerCase();
+      // Only show restore if we are NOT currently locked (new device/browser)
+      if (!predictionLocked && nameVal.length > 0) {
+        const match = Object.values(activePredictions).find(p => p.name && p.name.trim().toLowerCase() === nameVal);
+        setHidden(restoreSessionBtn, !match);
+      } else {
+        setHidden(restoreSessionBtn, true);
+      }
+    });
+
+    restoreSessionBtn.addEventListener("click", () => {
+      const nameVal = viewerNameInput.value.trim().toLowerCase();
+      const match = Object.values(activePredictions).find(p => p.name && p.name.trim().toLowerCase() === nameVal);
+      if (match) {
+        console.log(`[Restore] Syncing session for "${match.name}"...`);
+        predictionLocked = true;
+        isEditingReprediction = false;
+        existingWinner = match.predictedWinner || "";
+        existingPenalty = match.penalty || 0;
+
+        // Auto-fill the form
+        predictedWinnerInput.value = existingWinner;
+        scoreAInput.value = (match.scoreA !== undefined && match.scoreA !== null) ? match.scoreA : "";
+        scoreBInput.value = (match.scoreB !== undefined && match.scoreB !== null) ? match.scoreB : "";
+        
+        syncPredictionAccess(currentMeta);
+        setHidden(restoreSessionBtn, true);
+        setStatus(predictionStatus, "Session restored", "success");
+      }
     });
 
     // --- History Listener ---
@@ -466,10 +493,16 @@ if (!roomSelected) {
       // 3. Innings Break: You are blind for 2nd innings until you predict.
       const overVal = parseFloat(currentMeta.currentOver || "0");
       const isMatchStarted = overVal > 0 || currentMeta.secondInnings;
-      const isBlind = !isMatchStarted || (!predictionLocked && !currentMeta.isInningsBreak);
+      const isBlind = !isMatchStarted || !predictionLocked;
 
-      if (!predictionsPaused && (!predictionLocked || allowReprediction)) {
-        setStatus(predictionStatus, isBlind ? "Predict to see standings" : (summary || "Live"));
+      if (!predictionsPaused && (!predictionLocked || isEditingReprediction)) {
+        let statusMsg = summary || "Live";
+        if (isBlind) {
+          statusMsg = (!isMatchStarted && predictionLocked) 
+            ? "Standings hidden until match starts" 
+            : "Predict to see standings";
+        }
+        setStatus(predictionStatus, statusMsg);
       }
 
       // If we are currently looking at the live match details in the modal, re-render it
@@ -488,25 +521,31 @@ predictionForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   // Handle 'Update' click to toggle edit mode
-  if (predictionLocked && allowReprediction && !isEditingReprediction && !predictionsPaused) {
+  if (predictionLocked && isEditingReprediction && !isEditingReprediction && !predictionsPaused) {
     isEditingReprediction = true;
     syncPredictionAccess(currentMeta);
     return;
   }
 
-  if (!isFirebaseConfigured || !db || (predictionLocked && !allowReprediction) || predictionsPaused) {
-    syncPredictionAccess();
+  if (!isFirebaseConfigured || !db || (predictionLocked && !isEditingReprediction) || predictionsPaused) {
+    // If we're locked and not in edit mode, don't allow submission
+    if (predictionLocked && !isEditingReprediction) {
+      console.log("[Status] Submission blocked: Prediction is locked and not in edit mode.");
+    }
+    syncPredictionAccess(currentMeta);
     return;
   }
 
   const name = viewerNameInput.value.trim();
-  let scoreA = scoreAInput.value !== "" ? Number(scoreAInput.value) : null;
-  let scoreB = scoreBInput.value !== "" ? Number(scoreBInput.value) : null;
   const predictedWinner = predictedWinnerInput.value.trim();
   const lowWinner = predictedWinner.toLowerCase();
-  const lowChaser = (chasingTeam || "").toLowerCase();
+  const lowChaser = (currentMeta.chasingTeam || "").toLowerCase();
 
-  // Validate Overs format for Chaser
+  // 1. Initial extraction from visible fields
+  let scoreA = (scoreAInput.value !== "" && !scoreAInput.disabled) ? Number(scoreAInput.value) : null;
+  let scoreB = (scoreBInput.value !== "" && !scoreBInput.disabled) ? Number(scoreBInput.value) : null;
+
+  // 2. Specialized Overs validation for chaser
   if (lowChaser && lowWinner === lowChaser) {
     const teamA = (currentMeta.teamA || "Team A").toString().trim();
     const isAChaser = lowChaser === teamA.toLowerCase();
@@ -529,7 +568,7 @@ predictionForm?.addEventListener("submit", async (event) => {
         return;
       }
 
-      // Ensure .0 is preserved if needed (stored as number, so we handle display later)
+      // Final mapping for the chaser's overs
       if (isAChaser) scoreA = Number(val);
       else scoreB = Number(val);
     }
@@ -548,32 +587,59 @@ predictionForm?.addEventListener("submit", async (event) => {
   let addedPenalty = 0;
   let breakdown = [];
   const over = parseFloat(currentMeta.currentOver || "0");
-  const isUpdate = predictionLocked && !currentMeta.isInningsBreak; 
+  const overLabel = over > 0 ? (over <= 1.0 ? "the 1st over" : (over <= 2.0 ? "the 2nd over" : "the 3rd over")) : "pre-match";
+  
+  // Multi-device protection: if no local prediction, check for name duplicates in other clients
+  let effectiveUpdate = predictionLocked && !currentMeta.isInningsBreak;
+  let useExistingWinner = existingWinner;
+  let useExistingPenalty = existingPenalty;
+
+  if (!predictionLocked && !currentMeta.isInningsBreak && over > 0) {
+    // Check if this name already exists in activePredictions (from another device)
+    const existingEntry = Object.values(activePredictions).find(p => p.name && p.name.trim().toLowerCase() === name.trim().toLowerCase());
+    if (existingEntry) {
+      console.log(`[Security] Detected name match for "${name}" (device jump). Applying update rules.`);
+      effectiveUpdate = true;
+      useExistingWinner = existingEntry.predictedWinner || "";
+      useExistingPenalty = existingEntry.penalty || 0;
+    }
+  }
 
   if (currentMeta.isInningsBreak) {
     addedPenalty = 0; // Encourages participation in 2nd innings
   } else {
     // 1. Entry/Update Over penalty
-    if (!isUpdate) {
-      if (over >= 0.1 && over <= 1.0) { addedPenalty = 5; breakdown.push("-5 Entry Over 1"); }
-      else if (over > 1.0 && over <= 2.0) { addedPenalty = 10; breakdown.push("-10 Entry Over 2"); }
-      else if (over > 2.0 && over <= 3.0) { addedPenalty = 15; breakdown.push("-15 Entry Over 3"); }
+    if (!effectiveUpdate) {
+      if (over >= 0.1 && over <= 1.0) { addedPenalty = 5; breakdown.push("-5 Entry Penalty (1st Over)"); }
+      else if (over > 1.0 && over <= 2.0) { addedPenalty = 10; breakdown.push("-10 Entry Penalty (2nd Over)"); }
+      else if (over > 2.0 && over <= 3.0) { addedPenalty = 15; breakdown.push("-15 Entry Penalty (3rd Over)"); }
     } else {
-      if (over >= 0.1 && over <= 1.0) { addedPenalty = 5; breakdown.push("-5 Update Over 1"); }
-      else if (over > 1.0 && over <= 2.0) { addedPenalty = 20; breakdown.push("-20 Update Over 2"); }
-      else if (over > 2.0 && over <= 3.0) { addedPenalty = 30; breakdown.push("-30 Update Over 3"); }
+      if (over >= 0.1 && over <= 1.0) { addedPenalty = 5; breakdown.push("-5 Update Penalty (1st Over)"); }
+      else if (over > 1.0 && over <= 2.0) { addedPenalty = 15; breakdown.push("-15 Update Penalty (2nd Over)"); }
+      else if (over > 2.0 && over <= 3.0) { addedPenalty = 30; breakdown.push("-30 Update Penalty (3rd Over)"); }
     }
 
     // 2. Winner Change Penalty
-    if (existingWinner && predictedWinner !== existingWinner) {
+    if (useExistingWinner && predictedWinner !== useExistingWinner) {
       addedPenalty += 20;
-      breakdown.push("-20 Winner Change");
+      breakdown.push("-20 Winner Change Penalty");
     }
   }
 
+  // Final synchronization of existing state (handling both local locks and device jumps)
+  existingPenalty = useExistingPenalty;
+  existingWinner = useExistingWinner;
+
   if (addedPenalty > 0) {
     const totalNew = existingPenalty + addedPenalty;
-    const msg = `CAUTION: This action will incur a penalty of -${addedPenalty} pts.\n\nReason: ${breakdown.join(", ")}\n\nYour total match penalty will be -${totalNew} pts.\n\nContinue?`;
+    const isFirstTime = !effectiveUpdate && !predictionLocked;
+    const msg = `CAUTION: This action will incur a penalty of -${addedPenalty} pts.\n\n` +
+                `Reason: The game has already started and we're in ${overLabel}.\n` +
+                `Breakdown: ${breakdown.join(", ")}\n\n` +
+                `Your total match penalty will be -${totalNew} pts.\n\n` +
+                (isFirstTime ? `Note: If you don't submit a prediction now, you won't receive ANY points for this innings.\n\n` : "") +
+                `Continue?\n\n` +
+                `P.S. Join early next match to avoid these penalties!`;
     if (!window.confirm(msg)) return;
   }
 
@@ -944,7 +1010,9 @@ const renderHistoryList = () => {
   }
 
   // Parse and sort history by date descending
-  const historyEntries = sortHistoryLatestFirst(localHistory).map(([key, data]) => ({ id: key, ...data }));
+  const historyEntries = sortHistoryLatestFirst(localHistory)
+    .filter(([key, data]) => data && data.matchTitle) // Only show full archive payloads
+    .map(([key, data]) => ({ id: key, ...data }));
 
   if (historyEntries.length === 0 && !showLiveGame) {
     html += `<div class="empty-state">No daily updates explicitly finalized yet.</div>`;
@@ -973,6 +1041,19 @@ const renderMatchDetails = (matchId) => {
   let standings = [];
   
   if (matchId === "live") {
+    const overVal = parseFloat(currentMeta.currentOver || "0");
+    const isMatchStarted = overVal > 0 || currentMeta.secondInnings;
+    const isBlind = !isMatchStarted || !predictionLocked;
+
+    if (isBlind) {
+      matchDetailTitle.textContent = currentMeta.matchTitle || "Live Game";
+      matchDetailTitle.dataset.matchId = "live";
+      matchDetailList.innerHTML = `<tr><td colspan="5"><div class="blind-notice"><h3>Predictions are blind</h3><p>${!isMatchStarted ? "Standings will be revealed once the match starts!" : "Make your prediction first to see what others guessed!"}</p></div></td></tr>`;
+      setHidden(dailyView, true);
+      setHidden(matchDetailView, false);
+      return;
+    }
+
     // Show current predictions mapped to a dummy standings object
     matchDetailTitle.textContent = currentMeta.matchTitle || "Live Game";
     matchDetailTitle.dataset.matchId = "live";
@@ -1035,27 +1116,25 @@ const renderMatchDetails = (matchId) => {
         p2Score = "-";
       }
 
-      let penalty = Number(pActive.penalty || 0);
-      // Fallback/Legacy: if no penalty field but winner differs, show current logic
-      if (!pActive.penalty && p1Winner && p2Winner && p1Winner.toLowerCase() !== p2Winner.toLowerCase()) {
-        penalty = -20;
-      }
+      let storedPenalty = Number(pActive.penalty || 0);
+      let mismatchPenalty = (p1Winner && p2Winner && p1Winner.toLowerCase() !== p2Winner.toLowerCase()) ? -20 : 0;
+      let totalPenalty = storedPenalty + mismatchPenalty;
 
-      return {
-        name,
-        p1Winner,
-        p1Guess,
-        p1Score,
-        p1ScoreA: pActive.scoreA, // Added for pre-toss dual display
-        p1ScoreB: pActive.scoreB, // Added for pre-toss dual display
-        p2Winner,
-        p2Guess,
-        p2Score,
-        penalty,
-        total: (typeof p1Score === "number" || typeof p2Score === "number") 
-          ? Math.max(0, (Number(p1Score) || 0) + (Number(p2Score) || 0) + penalty)
-          : (p1Score === "Live" || p2Score === "Live" ? "Live" : 0)
-      };
+        return {
+          name,
+          p1Winner,
+          p1Guess,
+          p1Score,
+          p1ScoreA: pActive.scoreA, // Added for pre-toss dual display
+          p1ScoreB: pActive.scoreB, // Added for pre-toss dual display
+          p2Winner,
+          p2Guess,
+          p2Score,
+          penalty: totalPenalty,
+          total: (typeof p1Score === "number" || typeof p2Score === "number") 
+            ? Math.max(0, (Number(p1Score) || 0) + (Number(p2Score) || 0) - totalPenalty)
+            : (p1Score === "Live" || p2Score === "Live" ? "Live" : 0)
+        };
     });
 
     // Dedup by name: if two UIDs resolved to the same display name (e.g. manually restored 1st innings
@@ -1080,13 +1159,16 @@ const renderMatchDetails = (matchId) => {
           existing.p2Score  = row.p2Score;
         }
         // Recalculate penalty and total
-        existing.penalty = (existing.p1Winner && existing.p2Winner &&
-          existing.p1Winner.toLowerCase() !== existing.p2Winner.toLowerCase()) ? -20 : 0;
+        const storedPen = Math.max(Number(existing.penalty || 0), Number(row.penalty || 0));
+        const mismatchPen = (existing.p1Winner && existing.p2Winner &&
+          existing.p1Winner.toLowerCase() !== existing.p2Winner.toLowerCase()) ? 20 : 0;
+        existing.penalty = storedPen + mismatchPen;
+        
         const n1 = typeof existing.p1Score === "number" ? existing.p1Score : 0;
         const n2 = typeof existing.p2Score === "number" ? existing.p2Score : 0;
         existing.total = (existing.p1Score === "Live" || existing.p2Score === "Live")
           ? "Live"
-          : Math.max(0, n1 + n2 + existing.penalty);
+          : Math.max(0, n1 + n2 - Number(existing.penalty || 0)); 
         nameMap.set(key, existing);
       }
     }
@@ -1187,7 +1269,7 @@ const renderMatchDetails = (matchId) => {
       }
       
       const penAmt = Number(row.penalty || 0);
-      const penColor = penAmt < 0 ? "color: var(--system-red);" : "";
+      const penColor = penAmt > 0 ? "color: var(--system-red);" : "";
       
       return `
         <tr>
@@ -1196,7 +1278,7 @@ const renderMatchDetails = (matchId) => {
           </td>
           <td style="font-size: 0.9rem;">${p1Str}</td>
           <td style="font-size: 0.9rem;">${p2Str}</td>
-          <td style="font-weight: 700; ${penColor}">${penAmt < 0 ? penAmt : "-"}</td>
+          <td style="font-weight: 700; ${penColor}">${penAmt > 0 ? `-${penAmt}` : "-"}</td>
           <td style="text-align: right; font-weight: 800; color: var(--system-green);">${row.total}</td>
         </tr>
       `;
