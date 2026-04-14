@@ -607,7 +607,7 @@ const runMonitor = async () => {
     console.log("[Resume] Checking for existing match state in Firebase...");
     const metaSnap = await db.ref(`rooms/${ROOM}/meta`).once("value");
     const meta = metaSnap.val();
-    if (meta && isTeamMatch(meta.teamA, targetMatch.home) && isTeamMatch(meta.teamB, targetMatch.away)) {
+    if (meta && isTeamMatch(meta.teamA, targetMatch.home) && isTeamMatch(meta.teamB, targetMatch.away) && meta.tossWinner) {
       console.log(`[Resume] Found active session for ${targetMatch.home} vs ${targetMatch.away}.`);
       isTossConfirmed = true;
       firstInningsResolved = Boolean(meta.secondInnings);
@@ -697,6 +697,8 @@ const runMonitor = async () => {
             teamB: targetMatch.away,
             disableScoreA,
             disableScoreB,
+            tossWinner,
+            tossChoice,
             secondInnings: false,
             predictionsPaused: false
           });
