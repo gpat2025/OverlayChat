@@ -34,3 +34,10 @@ these penalties should be visible to the user when they are updating their predi
 
 audience.js update prediction should have caution with warning for penalty, making sure user says yes as a confirmation
 Timestamp/State Tracking is only for currentongoing match, we wont store this in db later
+
+
+
+Once 1st innings predictions are locked i.e. after >=3.0 overs, let users enter 2nd innings predictions already with a 2nd innings prediction button
+This button should disappear after the 1st innings is resolved since the main prediction button will be used for 2nd innings predictions anyway
+Make sure to xfer over if a user has entered 2nd innings prediction already after 1st innings was locked with this new button to normal 2nd innings guess i.e. both winner and overs/runs
+This way people don't have to make the 2nd innings prediction exactly in the innings break and can do the same with more than 1.2 hours in hand if they're already sure
