@@ -501,8 +501,13 @@ const runMonitor = async () => {
     // If room is empty or on an old match, push the next one
     if (!currentMeta.teamA || (!isTeamMatch(currentMeta.teamA, nextScheduledMatch.home) && !currentMeta.secondInnings)) {
       console.log(`[Setup] Pre-loading Next Match: ${nextScheduledMatch.home} vs ${nextScheduledMatch.away} (${nextScheduledMatch.date})`);
-      // Warning: Only clear if it's a completely different match and NOT live
-      const isLive = currentMeta.teamA && !currentMeta.predictionsPaused; // simplified
+      // A match is truly "live" only if the toss has been confirmed (tossWinner is set and
+      // belongs to the current teams) AND neither innings has been fully resolved yet.
+      // Using predictionsPaused as the liveness proxy is wrong — it's also false after archival.
+      const hasToss = currentMeta.tossWinner &&
+        (isTeamMatch(currentMeta.tossWinner, currentMeta.teamA) ||
+         isTeamMatch(currentMeta.tossWinner, currentMeta.teamB));
+      const isLive = currentMeta.teamA && hasToss;
       if (!isLive) {
         await db.ref(`rooms/${ROOM}/innings_history`).remove();
         await db.ref(`rooms/${ROOM}/predictions`).remove();
@@ -514,6 +519,9 @@ const runMonitor = async () => {
           disableScoreB: false,
           secondInnings: false,
           predictionsPaused: false,
+          tossWinner: null,
+          tossChoice: null,
+          batting1st: null,
           updatedAt: admin.database.ServerValue.TIMESTAMP
         });
       }
@@ -620,7 +628,13 @@ const runMonitor = async () => {
     console.log("[Resume] Checking for existing match state in Firebase...");
     const metaSnap = await db.ref(`rooms/${ROOM}/meta`).once("value");
     const meta = metaSnap.val();
-    if (meta && isTeamMatch(meta.teamA, targetMatch.home) && isTeamMatch(meta.teamB, targetMatch.away) && meta.tossWinner) {
+    // Guard: tossWinner must actually belong to one of the two CURRENT teams.
+    // Without this, a stale tossWinner from a previous match (e.g. "RCB" left over
+    // after transitioning to MI vs PBKS) falsely sets isTossConfirmed = true and
+    // skips toss detection for the new match entirely.
+    const tossIsForThisMatch = meta && meta.tossWinner &&
+      (isTeamMatch(meta.tossWinner, targetMatch.home) || isTeamMatch(meta.tossWinner, targetMatch.away));
+    if (meta && isTeamMatch(meta.teamA, targetMatch.home) && isTeamMatch(meta.teamB, targetMatch.away) && tossIsForThisMatch) {
       console.log(`[Resume] Found active session for ${targetMatch.home} vs ${targetMatch.away}.`);
       isTossConfirmed = true;
       firstInningsResolved = Boolean(meta.secondInnings);
@@ -1045,6 +1059,11 @@ ${top3Lines}
                   disableScoreB: false,
                   secondInnings: false,
                   predictionsPaused: false,
+                  // Explicitly clear toss fields so tomorrow's resume check doesn't
+                  // mistake tonight's tossWinner (e.g. "RCB") as valid for the new match.
+                  tossWinner: null,
+                  tossChoice: null,
+                  batting1st: null,
                   updatedAt: admin.database.ServerValue.TIMESTAMP
                 });
               }
