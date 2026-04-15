@@ -315,6 +315,10 @@ const scrapeCricbuzzMatch = async (teamA, teamB, matchPath = null) => {
     let tossWinner = null;
     let tossChoice = null;
     // Patterns: "X won the toss and opted to bat", "X opt to bowl", "X opt to bat"
+    // IMPORTANT: Run against bodySearch (scripts stripped), NOT raw html.
+    // Cricbuzz Next.js pages embed JSON for multiple nearby matches in <script> tags.
+    // Running against raw html causes cross-match contamination (e.g. KKR toss data
+    // appearing on the RCB vs LSG page because CSK vs KKR match JSON is embedded there).
     const tossPatterns = [
       />\s*([^<.]+?)\s+won the toss and\s+(?:opted to|opt to)\s+(bat|bowl)/i,
       />\s*([^<.]+?)\s+(?:opted to|opt to)\s+(bat|bowl)/i,
@@ -322,7 +326,7 @@ const scrapeCricbuzzMatch = async (teamA, teamB, matchPath = null) => {
       /([A-Z]{2,5})\s+(?:opted to|opt to)\s+(bat|bowl)/i
     ];
     for (const pat of tossPatterns) {
-      const tm = html.match(pat);
+      const tm = bodySearch.match(pat);
       if (tm) {
         const candidate = tm[1].trim();
         if (isTeamMatch(candidate, teamA) || isTeamMatch(candidate, teamB)) {
