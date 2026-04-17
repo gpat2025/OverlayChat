@@ -21,7 +21,7 @@ if (isFirebaseConfigured) {
   db = getDatabase(app);
 }
 
-export { db, isFirebaseConfigured, onValue, query, limitToLast, ref, get };
+export { db, isFirebaseConfigured, onValue, query, limitToLast, ref, get, set };
 
 const roomPath = (roomId, child = "") =>
   child ? `rooms/${roomId}/${child}` : `rooms/${roomId}`;

@@ -17,8 +17,12 @@
           ".read": true,
           ".write": true,
           "$clientId": {
-            ".validate": "newData.val() == null || (newData.hasChildren(['clientId', 'name', 'predictedWinner', 'updatedAt']))"
+            ".validate": "newData.val() == null || (newData.hasChildren(['clientId', 'name', 'predictedWinner', 'updatedAt']) || newData.hasChildren(['clientId', 'name', 'predictedWinner', 'submittedAt']))"
           }
+        },
+        "early_2nd_predictions": {
+          ".read": true,
+          ".write": true
         },
         "innings_history": {
           ".read": true,

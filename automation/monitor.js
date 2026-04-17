@@ -829,31 +829,39 @@ const runMonitor = async () => {
                 const stats = calculateInnings1Points(preds[pid], s1.r, meta);
                 preds[pid] = { ...preds[pid], ...stats, points: stats.points };
               }
-              await db.ref(`rooms/${ROOM}/innings_history/1st`).set(preds);
-              await db.ref(`rooms/${ROOM}/predictions`).remove();
-
-              // Log 1st innings resolution
-              const i1Entries = Object.values(preds).filter(p => p.name);
-              i1Entries.sort((a, b) => (b.points || 0) - (a.points || 0));
-              const i1Top = i1Entries[0];
-              console.log(`
-============================================================
-📊 1ST INNINGS RESOLVED — Game #${targetMatch.matchNo}: ${targetMatch.home} vs ${targetMatch.away}
-   Final Score   : ${battingTeamFull} ${s1.r}/${s1.w} (${s1.o} ov)
-   Participants  : ${i1Entries.length} prediction(s) scored
-   🥇 Highest   : ${i1Top ? `${i1Top.name} — ${i1Top.points} pts` : 'No submissions'}
-   ✅ 2nd Innings predictions are now OPEN.
-============================================================`);
-
-              // Swap score fields for 2nd innings
-              await db.ref(`rooms/${ROOM}/meta`).update({
-                secondInnings: true,
-                currentOver: "0.0",
-                isInningsBreak: true,
-                predictionsPaused: false,
-                disableScoreA: !meta.disableScoreA,
-                disableScoreB: !meta.disableScoreB
-              });
+               await db.ref(`rooms/${ROOM}/innings_history/1st`).set(preds);
+               await db.ref(`rooms/${ROOM}/predictions`).remove();
+ 
+              // --- MIGRATION: Early 2nd Innings Predictions ---
+              const earlySnap = await db.ref(`rooms/${ROOM}/early_2nd_predictions`).once("value");
+              const earlyPreds = earlySnap.val();
+              if (earlyPreds) {
+                console.log(`[Migration] Moving ${Object.keys(earlyPreds).length} early 2nd innings predictions to active...`);
+                await db.ref(`rooms/${ROOM}/predictions`).update(earlyPreds);
+                await db.ref(`rooms/${ROOM}/early_2nd_predictions`).remove();
+              }
+               // Log 1st innings resolution
+               const i1Entries = Object.values(preds).filter(p => p.name);
+               i1Entries.sort((a, b) => (b.points || 0) - (a.points || 0));
+               const i1Top = i1Entries[0];
+               console.log(`
+ ============================================================
+ 📊 1ST INNINGS RESOLVED — Game #${targetMatch.matchNo}: ${targetMatch.home} vs ${targetMatch.away}
+    Final Score   : ${battingTeamFull} ${s1.r}/${s1.w} (${s1.o} ov)
+    Participants  : ${i1Entries.length} prediction(s) scored
+    🥇 Highest   : ${i1Top ? `${i1Top.name} — ${i1Top.points} pts` : 'No submissions'}
+    ✅ 2nd Innings predictions are now OPEN.
+ ============================================================`);
+ 
+               // Swap score fields for 2nd innings
+               await db.ref(`rooms/${ROOM}/meta`).update({
+                 secondInnings: true,
+                 currentOver: "0.0",
+                 isInningsBreak: true,
+                 predictionsPaused: false,
+                 disableScoreA: !meta.disableScoreA,
+                 disableScoreB: !meta.disableScoreB
+               });
               firstInningsResolved = true;
 
               // --- DISCORD: 1st Innings Resolved ---

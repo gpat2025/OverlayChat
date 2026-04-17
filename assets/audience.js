@@ -8,7 +8,8 @@ import {
   savePrediction,
   sendChatMessage,
   sendReaction,
-  ref
+  ref,
+  set
 } from "./firebase.js";
 import {
   escapeHtml,
@@ -37,6 +38,7 @@ let seasonSortMode = "total"; // "total", "ppg", "avg"
 let returnToPlayerName = null; // Track source for "Back" button safe navigation
 let existingWinner = "";
 let existingPenalty = 0;
+let existingPenaltyDetails = "";
 
 
 const audienceGate = document.querySelector("#audienceGate");
@@ -59,6 +61,7 @@ const chatFeed = document.querySelector("#chatFeed");
 const predictionStatus = document.querySelector("#predictionStatus");
 const chatStatus = document.querySelector("#chatStatus");
 const predictionSubmitButton = predictionForm?.querySelector("button[type='submit']");
+const predict2ndBtn = document.querySelector("#predict2ndBtn");
 const restoreSessionBtn = document.querySelector("#restoreSessionBtn");
 
 const activeDiscovery = document.querySelector("#activeDiscovery");
@@ -102,6 +105,11 @@ let predictionsPaused = false;
 let currentMeta = {};
 let chasingTeam = null;
 let isEditingReprediction = false;
+let isEarlySubmissionMode = false;
+
+// Contextual Prediction Memory
+let h1Prediction = null;
+let earlyH2Prediction = null;
 
 const normalizeRoomCode = (value) =>
   value.toLowerCase().replace(/[^a-z0-9-_]/g, "").slice(0, 40);
@@ -124,7 +132,12 @@ const setPredictionInputsDisabled = (disabled, meta = {}) => {
 };
 
 const syncPredictionAccess = (meta = {}) => {
-  if (predictionsPaused) {
+  // Toggle early prediction button: 
+  // Visible only when 1st innings is locked (predictionsPaused) and 2nd innings hasn't started.
+  const showEarlyBtn = meta.predictionsPaused && !meta.secondInnings;
+  setHidden(predict2ndBtn, !showEarlyBtn);
+
+  if (predictionsPaused && !isEarlySubmissionMode) {
     setPredictionInputsDisabled(true, meta);
     predictionSubmitButton.disabled = true;
     predictionSubmitButton.textContent = "Predictions paused";
@@ -132,7 +145,7 @@ const syncPredictionAccess = (meta = {}) => {
     return;
   }
 
-  if (predictionLocked && !isEditingReprediction) {
+  if (predictionLocked && !isEditingReprediction && !isEarlySubmissionMode) {
     setPredictionInputsDisabled(true, meta);
     
     // Only allow editing if reprediction is enabled
@@ -146,12 +159,72 @@ const syncPredictionAccess = (meta = {}) => {
     return;
   }
 
-  setPredictionInputsDisabled(false, meta);
+  let accessMeta = { ...meta };
+  if (isEarlySubmissionMode) {
+    // Flip the disabled fields because we are predicting the OPPOSITE team's performance
+    accessMeta.disableScoreA = !meta.disableScoreA;
+    accessMeta.disableScoreB = !meta.disableScoreB;
+    
+    // Ensure the name field remains locked if they already have an H1 prediction
+    if (predictionLocked) {
+      viewerNameInput.disabled = true;
+    }
+  }
+
+  setPredictionInputsDisabled(false, accessMeta);
   predictionSubmitButton.disabled = false;
-  predictionSubmitButton.textContent = predictionLocked
-    ? "Save updated prediction"
-    : "Send prediction";
+  
+  // Status Pill Overrides
+  if (isEarlySubmissionMode) {
+    predictionSubmitButton.textContent = "Submit early 2nd innings prediction";
+    setStatus(predictionStatus, "H2 Preparation", "neutral");
+  } else if (predictionsPaused && !isEarlySubmissionMode) {
+    predictionSubmitButton.disabled = true;
+    predictionSubmitButton.textContent = "Predictions paused";
+    setStatus(predictionStatus, "Predictions paused", "danger");
+  } else {
+    const statusText = (predictionLocked && !isEditingReprediction) ? "Prediction locked" : "Live";
+    const statusTone = (predictionLocked && !isEditingReprediction) ? "neutral" : "default";
+    setStatus(predictionStatus, statusTone === "neutral" ? "Submission recorded" : statusText, statusTone);
+
+    predictionSubmitButton.textContent = predictionLocked
+      ? "Save updated prediction"
+      : "Send prediction";
+  }
 };
+
+const applyFormContext = () => {
+  const data = isEarlySubmissionMode ? earlyH2Prediction : h1Prediction;
+  
+  if (data) {
+    // Populate form with relevant context data
+    viewerNameInput.value = data.name || viewerNameInput.value; // Keep existing name if null
+    scoreAInput.value = (data.scoreA !== undefined && data.scoreA !== null) ? data.scoreA : "";
+    scoreBInput.value = (data.scoreB !== undefined && data.scoreB !== null) ? data.scoreB : "";
+    predictedWinnerInput.value = data.predictedWinner || "";
+    
+    // Sync globals for penalty calculation
+    existingWinner = data.predictedWinner || "";
+    existingPenalty = data.penalty || 0;
+    existingPenaltyDetails = data.penaltyDetails || "";
+  } else {
+    // No data for this context yet (e.g. haven't started an H2 draft)
+    scoreAInput.value = "";
+    scoreBInput.value = "";
+    predictedWinnerInput.selectedIndex = 0;
+    existingWinner = "";
+    existingPenalty = 0;
+    existingPenaltyDetails = "";
+  }
+  
+  updateInningsLabels();
+  syncPredictionAccess(currentMeta);
+};
+
+// Update labels on winner change
+predictedWinnerInput.addEventListener("change", () => {
+  updateInningsLabels();
+});
 
 roomJoinForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -214,14 +287,21 @@ const updateInningsLabels = () => {
   const teamB = (currentMeta.teamB || "").toString().trim();
   const is2ndInnings = Boolean(currentMeta.secondInnings);
   
+  // A "match-wide" 2nd innings context exists if we're actually in H2 OR if the user is pre-submitting.
+  const context2nd = is2ndInnings || isEarlySubmissionMode;
+  
   const isPreToss = teamA && teamB && !is2ndInnings && !currentMeta.disableScoreA && !currentMeta.disableScoreB;
   
   // Infer chasing team:
-  // If 2nd innings is ON, the team that is NOT disabled is currently batting (chasing)
   let inferredChaser = null;
   if (is2ndInnings) {
+    // Standard H2: The team that is NOT disabled is batting (chasing)
     if (currentMeta.disableScoreA && !currentMeta.disableScoreB) inferredChaser = teamB;
     else if (currentMeta.disableScoreB && !currentMeta.disableScoreA) inferredChaser = teamA;
+  } else if (isEarlySubmissionMode) {
+    // Early H2 Prep: The team that IS currently disabled in H1 scoreboard is the one batting in H2 (chasing)
+    if (currentMeta.disableScoreA && !currentMeta.disableScoreB) inferredChaser = teamA;
+    else if (currentMeta.disableScoreB && !currentMeta.disableScoreA) inferredChaser = teamB;
   }
 
   chasingTeam = inferredChaser;
@@ -240,14 +320,16 @@ const updateInningsLabels = () => {
 
   if (labelScoreA) {
     const isChaser = lowChaser === lowA;
-    const isOversMode = is2ndInnings && isChaser && isChasingWinner;
+    const isOversMode = context2nd && isChaser && isChasingWinner;
     
-    // Requirement: Hide score field if disabled by executive
-    const isDisabled = Boolean(currentMeta.disableScoreA);
+    // In Early Mode, we display the UI as it will appear in H2.
+    const isDisabled = isEarlySubmissionMode 
+       ? !currentMeta.disableScoreA // Flip: if A was batting in H1, it's disabled now
+       : Boolean(currentMeta.disableScoreA);
+
     labelScoreA.parentElement.classList.toggle("hidden", isDisabled);
-    // Also disable + clear hidden inputs so residual values don't get sent to Firebase
     scoreAInput.disabled = isDisabled;
-    if (isDisabled) scoreAInput.value = "";
+    if (isDisabled && !isEarlySubmissionMode) scoreAInput.value = "";
 
     if (isPreToss) {
       labelScoreA.textContent = `Predict if ${teamA} bats first`;
@@ -255,21 +337,21 @@ const updateInningsLabels = () => {
       labelScoreA.textContent = isOversMode ? `${teamA} Overs` : `${teamA} Score`;
     }
     
-    // If it's the 2nd innings, allow decimals for both fields to be safe
-    scoreAInput.step = is2ndInnings ? "any" : "1";
+    scoreAInput.step = context2nd ? "any" : "1";
     scoreAInput.placeholder = isOversMode ? "e.g. 18.2" : "0";
   }
   
   if (labelScoreB) {
     const isChaser = lowChaser === lowB;
-    const isOversMode = is2ndInnings && isChaser && isChasingWinner;
+    const isOversMode = context2nd && isChaser && isChasingWinner;
 
-    // Requirement: Hide score field if disabled by executive
-    const isDisabled = Boolean(currentMeta.disableScoreB);
+    const isDisabled = isEarlySubmissionMode 
+       ? !currentMeta.disableScoreB // Flip
+       : Boolean(currentMeta.disableScoreB);
+
     labelScoreB.parentElement.classList.toggle("hidden", isDisabled);
-    // Also disable + clear hidden inputs so residual values don't get sent to Firebase
     scoreBInput.disabled = isDisabled;
-    if (isDisabled) scoreBInput.value = "";
+    if (isDisabled && !isEarlySubmissionMode) scoreBInput.value = "";
 
     if (isPreToss) {
       labelScoreB.textContent = `Predict if ${teamB} bats first`;
@@ -277,8 +359,7 @@ const updateInningsLabels = () => {
       labelScoreB.textContent = isOversMode ? `${teamB} Overs` : `${teamB} Score`;
     }
     
-    // If it's the 2nd innings, allow decimals for both fields to be safe
-    scoreBInput.step = is2ndInnings ? "any" : "1";
+    scoreBInput.step = context2nd ? "any" : "1";
     scoreBInput.placeholder = isOversMode ? "e.g. 18.2" : "0";
   }
 };
@@ -416,25 +497,14 @@ if (!roomSelected) {
     });
 
     onValue(roomRef(roomId, `predictions/${clientId}`), (snapshot) => {
-      const prediction = snapshot.val();
-      predictionLocked = Boolean(prediction);
+      h1Prediction = snapshot.val();
+      predictionLocked = Boolean(h1Prediction);
+      if (!isEarlySubmissionMode) applyFormContext();
+    });
 
-      if (prediction) {
-        setPredictionInputsDisabled(true, currentMeta);
-        viewerNameInput.value = prediction.name || "";
-        scoreAInput.value = (prediction.scoreA !== undefined && prediction.scoreA !== null) ? prediction.scoreA : "";
-        scoreBInput.value = (prediction.scoreB !== undefined && prediction.scoreB !== null) ? prediction.scoreB : "";
-        predictedWinnerInput.value = prediction.predictedWinner || "";
-        existingWinner = prediction.predictedWinner || "";
-        existingPenalty = prediction.penalty || 0;
-        existingPenaltyDetails = prediction.penaltyDetails || "";
-        setHidden(restoreSessionBtn, true);
-      } else {
-        existingWinner = "";
-        existingPenalty = 0;
-        existingPenaltyDetails = "";
-      }
-      syncPredictionAccess(currentMeta);
+    onValue(roomRef(roomId, `early_2nd_predictions/${clientId}`), (snapshot) => {
+      earlyH2Prediction = snapshot.val();
+      if (isEarlySubmissionMode) applyFormContext();
     });
 
     // --- Restore Session Logic ---
@@ -537,15 +607,17 @@ predictionForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   // Handle 'Update' click to toggle edit mode
-  if (predictionLocked && !isEditingReprediction && !predictionsPaused) {
+  if (predictionLocked && !isEditingReprediction && !predictionsPaused && !isEarlySubmissionMode) {
     isEditingReprediction = true;
     syncPredictionAccess(currentMeta);
     return;
   }
 
-  if (!isFirebaseConfigured || !db || (predictionLocked && !isEditingReprediction) || predictionsPaused) {
+  const isBlocked = !isEarlySubmissionMode && (predictionLocked || predictionsPaused);
+
+  if (!isFirebaseConfigured || !db || (isBlocked && !isEditingReprediction)) {
     // If we're locked and not in edit mode, don't allow submission
-    if (predictionLocked && !isEditingReprediction) {
+    if (predictionLocked && !isEditingReprediction && !isEarlySubmissionMode) {
       console.log("[Status] Submission blocked: Prediction is locked and not in edit mode.");
     }
     syncPredictionAccess(currentMeta);
@@ -687,24 +759,47 @@ predictionForm?.addEventListener("submit", async (event) => {
     const finalPenalty = existingPenalty + addedPenalty;
     const newDetails = breakdown.length > 0 ? (existingPenaltyDetails ? existingPenaltyDetails + ", " + breakdown.join(", ") : breakdown.join(", ")) : existingPenaltyDetails;
  
-    await savePrediction(roomId, clientId, {
-      clientId,
-      name,
-      scoreA,
-      scoreB,
-      predictedWinner,
-      penalty: finalPenalty,
-      penaltyDetails: newDetails,
-      matchId: currentMeta.matchTitle || "unknown",
-      currentInnings: currentMeta.secondInnings ? "H2" : "H1"
-    });
-    predictionLocked = true;
-    isEditingReprediction = false;
-    existingWinner = predictedWinner;
-    existingPenalty = finalPenalty;
-    existingPenaltyDetails = newDetails;
-    syncPredictionAccess(currentMeta);
-    setStatus(predictionStatus, "Prediction locked", "neutral");
+    if (isEarlySubmissionMode) {
+      // 1. Save to the temporary early node (no penalties for early submission)
+      const earlyRef = roomRef(roomId, `early_2nd_predictions/${clientId}`);
+      await set(earlyRef, {
+        clientId,
+        name,
+        scoreA,
+        scoreB,
+        predictedWinner,
+        penalty: 0,
+        penaltyDetails: "Early submission (No penalty)",
+        submittedAt: Date.now()
+      });
+      
+      // Reset mode and notify
+      isEarlySubmissionMode = false;
+      predict2ndBtn.innerHTML = '<i class="fa-solid fa-clock-rotate-left" style="margin-right: 8px;"></i> Predict 2nd Innings Early';
+      syncPredictionAccess(currentMeta);
+      setStatus(predictionStatus, "Early H2 prediction stored!", "neutral");
+      alert("Stored! Your 2nd innings prediction will be automatically applied once the 1st innings ends.");
+    } else {
+      // 2. Normal submission
+      await savePrediction(roomId, clientId, {
+        clientId,
+        name,
+        scoreA,
+        scoreB,
+        predictedWinner,
+        penalty: finalPenalty,
+        penaltyDetails: newDetails,
+        matchId: currentMeta.matchTitle || "unknown",
+        currentInnings: currentMeta.secondInnings ? "H2" : "H1"
+      });
+      predictionLocked = true;
+      isEditingReprediction = false;
+      existingWinner = predictedWinner;
+      existingPenalty = finalPenalty;
+      existingPenaltyDetails = newDetails;
+      syncPredictionAccess(currentMeta);
+      setStatus(predictionStatus, "Prediction locked", "neutral");
+    }
   } catch (error) {
     console.error(error);
     setStatus(predictionStatus, "Prediction failed", "danger");
@@ -892,6 +987,17 @@ const handleGifSearch = async () => {
     setReactionStatus("Search failed", "danger");
   }
 };
+
+// Early submission toggle
+predict2ndBtn.addEventListener("click", () => {
+  isEarlySubmissionMode = !isEarlySubmissionMode;
+  if (isEarlySubmissionMode) {
+    predict2ndBtn.innerHTML = '<i class="fa-solid fa-xmark" style="margin-right: 8px;"></i> Cancel Early H2 Prediction';
+  } else {
+    predict2ndBtn.innerHTML = '<i class="fa-solid fa-clock-rotate-left" style="margin-right: 8px;"></i> Predict 2nd Innings Early';
+  }
+  applyFormContext(); // Swaps form data instantly
+});
 
 let searchTimeout;
 gifSearchInput?.addEventListener("input", (e) => {
@@ -1304,8 +1410,8 @@ const renderMatchDetails = (matchId) => {
 
         // Hard Blind (Participation-Based Reveal)
         const hideP1 = !isMe && (!isLive || !isLocked) && !currentMeta.secondInnings;
-        // P2 reveal logic: Participation required between 0.1 and 2.6 overs.
-        const hideP2 = !isMe && !isLocked && (!isLive || !hasPredicted2nd) && !!currentMeta.secondInnings;
+        // P2 reveal logic: Hidden during H1, Innings Break, and early H2 until user participates or 3.0-over lock.
+        const hideP2 = !isMe && !isLocked && (!isLive || !hasPredicted2nd);
 
         if (hideP1 && row.p1Score !== "-") {
           p1Str = `<span class="dim" style="font-style: italic;"><i class="fa-solid fa-eye-slash" style="margin-right:4px;"></i> Hidden</span>`;
