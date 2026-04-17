@@ -25,8 +25,8 @@ export const getAudienceEntryUrl = () => {
 window.showPenaltyBreakdown = (el) => {
   const details = el.dataset.details;
   if (!details || details === "undefined") return;
-  const list = details.split(', ').map(line => `• ${line}`).join('\n');
-  alert(`Penalty Breakdown:\n\n${list}`);
+  const list = details.split(', ').join('; ');
+  alert(`Penalty Breakdown: ${list}`);
 };
 
 export const getClientId = () => {

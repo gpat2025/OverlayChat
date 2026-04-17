@@ -732,7 +732,7 @@ predictionForm?.addEventListener("submit", async (event) => {
   // 2. Winner Change Penalty - Active even during innings break
   if (useExistingWinner && predictedWinner !== useExistingWinner) {
     addedPenalty += 20;
-    breakdown.push(`-20 for winner team change, ${inningsName}`);
+    breakdown.push(`-20 for winner team change in ${inningsName}`);
   }
 
   // Final synchronization of existing state (handling both local locks and device jumps)
@@ -1255,9 +1255,7 @@ const renderMatchDetails = (matchId) => {
         p2Score = "-";
       }
 
-      let storedPenalty = Number(pActive.penalty || 0);
-      let mismatchPenalty = (p1Winner && p2Winner && p1Winner.toLowerCase() !== p2Winner.toLowerCase()) ? -20 : 0;
-      let totalPenalty = storedPenalty + mismatchPenalty;
+      let totalPenalty = Number(pActive.penalty || 0);
 
         return {
           name,
@@ -1266,6 +1264,7 @@ const renderMatchDetails = (matchId) => {
           p1Score,
           p1ScoreA: pActive.scoreA, // Added for pre-toss dual display
           p1ScoreB: pActive.scoreB, // Added for pre-toss dual display
+          p2Winner,
           p2Guess,
           p2Score,
           penalty: totalPenalty,
@@ -1298,10 +1297,7 @@ const renderMatchDetails = (matchId) => {
           existing.p2Score  = row.p2Score;
         }
         // Recalculate penalty and total
-        const storedPen = Math.max(Number(existing.penalty || 0), Number(row.penalty || 0));
-        const mismatchPen = (existing.p1Winner && existing.p2Winner &&
-          existing.p1Winner.toLowerCase() !== existing.p2Winner.toLowerCase()) ? 20 : 0;
-        existing.penalty = storedPen + mismatchPen;
+        existing.penalty = Math.max(Number(existing.penalty || 0), Number(row.penalty || 0));
         existing.penaltyDetails = row.penaltyDetails || existing.penaltyDetails || "";
         
         const n1 = typeof existing.p1Score === "number" ? existing.p1Score : 0;
