@@ -12,8 +12,8 @@ jobs:
   monitor:
     runs-on: ubuntu-latest
     
-    # Allows the script to stay alive parsing updates for up to 5 hours (300 mins)
-    timeout-minutes: 300 
+    # Allows the script to stay alive parsing updates for up to 7.5 hours (450 mins)
+    timeout-minutes: 450 
 
     steps:
       - name: Checkout Repository Configuration
