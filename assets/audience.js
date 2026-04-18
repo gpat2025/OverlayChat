@@ -512,7 +512,9 @@ if (!roomSelected) {
       const nameVal = viewerNameInput.value.trim().toLowerCase();
       // Only show restore if we are NOT currently locked (new device/browser)
       if (!predictionLocked && nameVal.length > 0) {
-        const match = Object.values(activePredictions).find(p => p.name && p.name.trim().toLowerCase() === nameVal);
+        // Check current predictions OR resolved first innings
+        const match = Object.values(activePredictions).find(p => p.name && p.name.trim().toLowerCase() === nameVal)
+                   || Object.values(liveHist1st).find(p => p.name && p.name.trim().toLowerCase() === nameVal);
         setHidden(restoreSessionBtn, !match);
       } else {
         setHidden(restoreSessionBtn, true);
@@ -521,19 +523,20 @@ if (!roomSelected) {
 
     restoreSessionBtn.addEventListener("click", () => {
       const nameVal = viewerNameInput.value.trim().toLowerCase();
-      const match = Object.values(activePredictions).find(p => p.name && p.name.trim().toLowerCase() === nameVal);
+      const match = Object.values(activePredictions).find(p => p.name && p.name.trim().toLowerCase() === nameVal)
+                 || Object.values(liveHist1st).find(p => p.name && p.name.trim().toLowerCase() === nameVal);
       if (match) {
         console.log(`[Restore] Syncing session for "${match.name}"...`);
         predictionLocked = true;
         isEditingReprediction = false;
         existingWinner = match.predictedWinner || "";
-        existingPenalty = match.penalty || 0;
+        existingPenalty = Number(match.penalty || 0);
         existingPenaltyDetails = match.penaltyDetails || "";
 
         // Auto-fill the form
-        predictedWinnerInput.value = existingWinner;
-        scoreAInput.value = (match.scoreA !== undefined && match.scoreA !== null) ? match.scoreA : "";
-        scoreBInput.value = (match.scoreB !== undefined && match.scoreB !== null) ? match.scoreB : "";
+        if (predictedWinnerInput) predictedWinnerInput.value = existingWinner;
+        if (scoreAInput) scoreAInput.value = (match.scoreA !== undefined && match.scoreA !== null) ? match.scoreA : "";
+        if (scoreBInput) scoreBInput.value = (match.scoreB !== undefined && match.scoreB !== null) ? match.scoreB : "";
         
         syncPredictionAccess(currentMeta);
         setHidden(restoreSessionBtn, true);
@@ -703,14 +706,20 @@ predictionForm?.addEventListener("submit", async (event) => {
   let useExistingWinner = existingWinner;
   let useExistingPenalty = existingPenalty;
 
-  if (!predictionLocked && !currentMeta.isInningsBreak && over > 0) {
-    // Check if this name already exists in activePredictions (from another device)
-    const existingEntry = Object.values(activePredictions).find(p => p.name && p.name.trim().toLowerCase() === name.trim().toLowerCase());
+  if (!predictionLocked && !currentMeta.isInningsBreak && over >= 0) {
+    // 1. Check if this name already exists in activePredictions (current innings)
+    let existingEntry = Object.values(activePredictions).find(p => p.name && p.name.trim().toLowerCase() === name.trim().toLowerCase());
+    
+    // 2. Cross-Innings Inheritance: If in 2nd innings, check if they were in the 1st innings to inherit selection/penalty
+    if (!existingEntry && currentMeta.secondInnings) {
+      existingEntry = Object.values(liveHist1st).find(p => p.name && p.name.trim().toLowerCase() === name.trim().toLowerCase());
+    }
+
     if (existingEntry) {
-      console.log(`[Security] Detected name match for "${name}" (device jump). Applying update rules.`);
+      console.log(`[Security] Detected name match for "${name}" (state recovery). Applying inherited rules.`);
       effectiveUpdate = true;
       useExistingWinner = existingEntry.predictedWinner || "";
-      useExistingPenalty = existingEntry.penalty || 0;
+      useExistingPenalty = Number(existingEntry.penalty || 0);
       existingPenaltyDetails = existingEntry.penaltyDetails || "";
     }
   }
@@ -734,6 +743,8 @@ predictionForm?.addEventListener("submit", async (event) => {
   // Ignore pre-toss submissions
   const isPreToss = (!currentMeta.tossWinner || (currentMeta.currentOver === "0.0" && !currentMeta.secondInnings));
   if (useExistingWinner && predictedWinner !== useExistingWinner && !isPreToss) {
+    // Ensure we don't penalize multiple times for the SAME "winner change" text if they already have it in details?
+    // Actually, the penalty logic should trigger if the winner is DIFFERENT from their LAST recorded winner.
     addedPenalty += 20;
     breakdown.push(`-20 for winner team change, 2nd innings`);
   }
@@ -765,7 +776,13 @@ predictionForm?.addEventListener("submit", async (event) => {
 
   try {
     const finalPenalty = existingPenalty + addedPenalty;
-    const newDetails = breakdown.length > 0 ? (existingPenaltyDetails ? existingPenaltyDetails + ", " + breakdown.join(", ") : breakdown.join(", ")) : (isEarlySubmissionMode ? existingPenaltyDetails || "Early submission (No penalty)" : existingPenaltyDetails);
+    const newItems = breakdown.join(", ");
+    let newDetails = existingPenaltyDetails;
+    if (newItems) {
+      newDetails = existingPenaltyDetails ? (existingPenaltyDetails + ", " + newItems) : newItems;
+    } else if (isEarlySubmissionMode && !existingPenaltyDetails) {
+      newDetails = "Early submission (No penalty)";
+    }
  
     if (isEarlySubmissionMode) {
       // 1. Save to the temporary early node (with proper inherited penalties)
